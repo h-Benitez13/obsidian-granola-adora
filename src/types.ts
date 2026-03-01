@@ -1,3 +1,4 @@
+/** Shape returned by Granola internal API for each document. */
 export interface GranolaDocument {
   id: string;
   title: string | null;
@@ -10,23 +11,57 @@ export interface GranolaDocument {
   people: GranolaPeople | null;
   google_calendar_event: GranolaCalendarEvent | null;
   transcript: GranolaTranscriptEntry[] | null;
+  /** Which workspace list (folder) this doc belongs to, if any. */
+  _listTitle?: string;
+  /** Whether this doc was shared with the user (not owned). */
+  _shared?: boolean;
 }
 
 export interface GranolaPeople {
-  creator: GranolaPerson | null;
-  attendees: GranolaPerson[];
+  creator: GranolaPersonCreator | null;
+  attendees: GranolaPersonAttendee[];
 }
 
-export interface GranolaPerson {
-  name: string | null;
+/** Creator always has a top-level `name`. */
+export interface GranolaPersonCreator {
+  name: string;
   email: string;
+  details?: GranolaPersonDetails;
+}
+
+/** Attendees have `email` and `details` — name is nested. */
+export interface GranolaPersonAttendee {
+  email: string;
+  details?: GranolaPersonDetails;
+}
+
+export interface GranolaPersonDetails {
+  person?: {
+    name?: { fullName?: string };
+    avatar?: string;
+    linkedin?: { handle?: string };
+    employment?: { name?: string; title?: string };
+  };
+  company?: { name?: string };
 }
 
 export interface GranolaCalendarEvent {
   id: string | null;
   summary: string | null;
-  start?: string | null;
-  end?: string | null;
+  start?: GranolaCalendarDateTime | null;
+  end?: GranolaCalendarDateTime | null;
+  attendees?: GranolaCalendarAttendee[];
+}
+
+export interface GranolaCalendarDateTime {
+  dateTime: string;
+  timeZone?: string;
+}
+
+export interface GranolaCalendarAttendee {
+  email: string;
+  responseStatus?: string;
+  self?: boolean;
 }
 
 export interface GranolaTranscriptEntry {
@@ -39,10 +74,31 @@ export interface GranolaTranscriptEntry {
   is_final: boolean;
 }
 
+// ── API response shapes ──
+
 export interface GranolaListResponse {
   docs: GranolaDocument[];
   next_cursor: string | null;
 }
+
+export interface GranolaSharedResponse {
+  docs: GranolaDocument[];
+}
+
+export interface GranolaDocumentList {
+  id: string;
+  title: string;
+  description: string | null;
+  icon: { type: string; color: string; value: string } | null;
+  parent_document_list_id: string | null;
+  documents: GranolaDocument[];
+}
+
+export interface GranolaDocumentListsResponse {
+  lists: GranolaDocumentList[];
+}
+
+// ── Plugin settings ──
 
 export interface GranolaAdoraSettings {
   syncIntervalMinutes: number;
@@ -58,6 +114,10 @@ export interface GranolaAdoraSettings {
   knownTopics: string[];
   lastSyncTimestamp: string | null;
   syncedDocIds: string[];
+  /** Sync notes shared with you by teammates. */
+  syncSharedDocs: boolean;
+  /** Sync workspace folders (document lists) visible to you. */
+  syncWorkspaceLists: boolean;
 }
 
 export const DEFAULT_SETTINGS: GranolaAdoraSettings = {
@@ -73,7 +133,9 @@ export const DEFAULT_SETTINGS: GranolaAdoraSettings = {
   knownCustomers: [],
   knownTopics: [],
   lastSyncTimestamp: null,
-  syncedDocIds: []
+  syncedDocIds: [],
+  syncSharedDocs: true,
+  syncWorkspaceLists: true,
 };
 
 export interface SyncResult {
@@ -88,4 +150,20 @@ export interface ExtractedTags {
   topics: string[];
   actionItems: string[];
   people: string[];
+}
+
+// ── Helpers ──
+
+/** Safely extract display name from an attendee. */
+export function getAttendeeName(attendee: GranolaPersonAttendee): string {
+  return (
+    attendee.details?.person?.name?.fullName ?? attendee.email.split("@")[0]
+  );
+}
+
+/** Safely extract company name from an attendee. */
+export function getAttendeeCompany(
+  attendee: GranolaPersonAttendee,
+): string | null {
+  return attendee.details?.company?.name ?? null;
 }

@@ -1,8 +1,12 @@
-import { GranolaDocument, ExtractedTags } from "./types";
+import { GranolaDocument, ExtractedTags, getAttendeeName } from "./types";
 
 const HORIZONTAL_RULE = "\n---\n";
 
-export function renderMeetingNote(doc: GranolaDocument, tags: ExtractedTags, includeTranscript: boolean): string {
+export function renderMeetingNote(
+  doc: GranolaDocument,
+  tags: ExtractedTags,
+  includeTranscript: boolean,
+): string {
   const parts: string[] = [];
 
   parts.push(renderFrontmatter(doc, tags));
@@ -31,18 +35,18 @@ function renderFrontmatter(doc: GranolaDocument, tags: ExtractedTags): string {
     title: doc.title ?? "Untitled Meeting",
     date: doc.created_at,
     updated: doc.updated_at,
-    type: "meeting"
+    type: "meeting",
   };
 
   if (doc.people?.creator?.name) {
     fm["owner"] = doc.people.creator.name;
   }
 
-  if (doc.google_calendar_event?.start) {
-    fm["scheduled_start"] = doc.google_calendar_event.start;
+  if (doc.google_calendar_event?.start?.dateTime) {
+    fm["scheduled_start"] = doc.google_calendar_event.start.dateTime;
   }
-  if (doc.google_calendar_event?.end) {
-    fm["scheduled_end"] = doc.google_calendar_event.end;
+  if (doc.google_calendar_event?.end?.dateTime) {
+    fm["scheduled_end"] = doc.google_calendar_event.end.dateTime;
   }
 
   const allTags = ["meeting", "granola"];
@@ -60,6 +64,13 @@ function renderFrontmatter(doc: GranolaDocument, tags: ExtractedTags): string {
 
   if (tags.customers.length > 0) {
     fm["customers"] = tags.customers;
+  }
+
+  if (doc._listTitle) {
+    fm["folder"] = doc._listTitle;
+  }
+  if (doc._shared) {
+    fm["shared"] = true;
   }
 
   fm["synced"] = new Date().toISOString();
@@ -87,17 +98,17 @@ function renderHeader(doc: GranolaDocument): string {
   const title = doc.title ?? "Untitled Meeting";
   const lines: string[] = [`\n# ${title}\n`];
 
-  if (doc.google_calendar_event?.start) {
-    const start = new Date(doc.google_calendar_event.start);
+  if (doc.google_calendar_event?.start?.dateTime) {
+    const start = new Date(doc.google_calendar_event.start.dateTime);
     const dateStr = start.toLocaleDateString("en-US", {
       weekday: "long",
       year: "numeric",
       month: "long",
-      day: "numeric"
+      day: "numeric",
     });
     const timeStr = start.toLocaleTimeString("en-US", {
       hour: "2-digit",
-      minute: "2-digit"
+      minute: "2-digit",
     });
     lines.push(`> ${dateStr} at ${timeStr}\n`);
   }
@@ -111,7 +122,7 @@ function renderAttendees(doc: GranolaDocument): string {
 
   const lines: string[] = ["## Attendees\n"];
   for (const person of attendees) {
-    const name = person.name ?? person.email;
+    const name = getAttendeeName(person);
     lines.push(`- [[${name}]] (${person.email})`);
   }
   lines.push("");
@@ -150,11 +161,17 @@ function renderTagsSection(tags: ExtractedTags): string {
   const lines: string[] = [HORIZONTAL_RULE, "## Related\n"];
 
   if (tags.customers.length > 0) {
-    lines.push("**Customers:** " + tags.customers.map((c) => `[[Customers/${c}|${c}]]`).join(", "));
+    lines.push(
+      "**Customers:** " +
+        tags.customers.map((c) => `[[Customers/${c}|${c}]]`).join(", "),
+    );
   }
 
   if (tags.topics.length > 0) {
-    lines.push("**Topics:** " + tags.topics.map((t) => `#topic/${sanitizeTag(t)}`).join(" "));
+    lines.push(
+      "**Topics:** " +
+        tags.topics.map((t) => `#topic/${sanitizeTag(t)}`).join(" "),
+    );
   }
 
   lines.push("");
@@ -171,7 +188,7 @@ function renderTranscript(doc: GranolaDocument): string {
     const time = new Date(entry.start_timestamp).toLocaleTimeString("en-US", {
       hour: "2-digit",
       minute: "2-digit",
-      second: "2-digit"
+      second: "2-digit",
     });
     lines.push(`**${speaker}** (${time}): ${entry.text}`);
     lines.push("");
@@ -180,7 +197,11 @@ function renderTranscript(doc: GranolaDocument): string {
   return lines.join("\n");
 }
 
-export function renderIdeaNote(title: string, linkedMeetingPaths: string[], initialContent?: string): string {
+export function renderIdeaNote(
+  title: string,
+  linkedMeetingPaths: string[],
+  initialContent?: string,
+): string {
   const fm = [
     "---",
     `title: "${escapeYaml(title)}"`,
@@ -189,7 +210,7 @@ export function renderIdeaNote(title: string, linkedMeetingPaths: string[], init
     `status: "draft"`,
     `tags:`,
     `  - "idea"`,
-    `---`
+    `---`,
   ];
 
   const body = [
@@ -205,7 +226,7 @@ export function renderIdeaNote(title: string, linkedMeetingPaths: string[], init
     "",
     "## Open Questions\n",
     "- ",
-    ""
+    "",
   ];
 
   return [...fm, ...body].join("\n");
@@ -219,7 +240,7 @@ export function renderCustomerNote(customerName: string): string {
     `type: "customer"`,
     `tags:`,
     `  - "customer"`,
-    `---`
+    `---`,
   ];
 
   const body = [
@@ -237,7 +258,7 @@ export function renderCustomerNote(customerName: string): string {
     "",
     "## Feedback & Requests\n",
     "- ",
-    ""
+    "",
   ];
 
   return [...fm, ...body].join("\n");

@@ -22,7 +22,9 @@ export class GranolaAdoraSettingTab extends PluginSettingTab {
         statusText.setText("Granola: Connected");
         statusText.style.color = "var(--text-success)";
       } else {
-        statusText.setText("Granola: Not found — open Granola desktop app and sign in");
+        statusText.setText(
+          "Granola: Not found — open Granola desktop app and sign in",
+        );
         statusText.style.color = "var(--text-error)";
       }
     });
@@ -31,7 +33,9 @@ export class GranolaAdoraSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Sync interval (minutes)")
-      .setDesc("How often to automatically pull new notes. Set to 0 to disable auto-sync.")
+      .setDesc(
+        "How often to automatically pull new notes. Set to 0 to disable auto-sync.",
+      )
       .addText((text) =>
         text
           .setPlaceholder("30")
@@ -43,27 +47,61 @@ export class GranolaAdoraSettingTab extends PluginSettingTab {
               await this.plugin.savePluginSettings();
               this.plugin.restartAutoSync();
             }
-          })
+          }),
       );
 
     new Setting(containerEl)
       .setName("Sync on startup")
       .setDesc("Automatically sync when Obsidian opens.")
       .addToggle((toggle) =>
-        toggle.setValue(this.plugin.settings.syncOnStartup).onChange(async (value) => {
-          this.plugin.settings.syncOnStartup = value;
-          await this.plugin.savePluginSettings();
-        })
+        toggle
+          .setValue(this.plugin.settings.syncOnStartup)
+          .onChange(async (value) => {
+            this.plugin.settings.syncOnStartup = value;
+            await this.plugin.savePluginSettings();
+          }),
       );
 
     new Setting(containerEl)
       .setName("Include transcript")
-      .setDesc("Fetch and include the full meeting transcript in each note. Increases sync time.")
+      .setDesc(
+        "Fetch and include the full meeting transcript in each note. Increases sync time.",
+      )
       .addToggle((toggle) =>
-        toggle.setValue(this.plugin.settings.includeTranscript).onChange(async (value) => {
-          this.plugin.settings.includeTranscript = value;
-          await this.plugin.savePluginSettings();
-        })
+        toggle
+          .setValue(this.plugin.settings.includeTranscript)
+          .onChange(async (value) => {
+            this.plugin.settings.includeTranscript = value;
+            await this.plugin.savePluginSettings();
+          }),
+      );
+
+    containerEl.createEl("h3", { text: "Sources" });
+
+    new Setting(containerEl)
+      .setName("Sync shared notes")
+      .setDesc("Import notes that teammates have shared with you directly.")
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.syncSharedDocs)
+          .onChange(async (value) => {
+            this.plugin.settings.syncSharedDocs = value;
+            await this.plugin.savePluginSettings();
+          }),
+      );
+
+    new Setting(containerEl)
+      .setName("Sync workspace folders")
+      .setDesc(
+        "Import notes from Granola workspace folders (e.g. User Interviews, P+E, General).",
+      )
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.syncWorkspaceLists)
+          .onChange(async (value) => {
+            this.plugin.settings.syncWorkspaceLists = value;
+            await this.plugin.savePluginSettings();
+          }),
       );
 
     containerEl.createEl("h3", { text: "Folders" });
@@ -78,45 +116,58 @@ export class GranolaAdoraSettingTab extends PluginSettingTab {
           .onChange(async (value) => {
             this.plugin.settings.baseFolderPath = value.trim() || "Adora";
             await this.plugin.savePluginSettings();
-          })
+          }),
       );
 
     new Setting(containerEl).setName("Meetings folder").addText((text) =>
-      text.setValue(this.plugin.settings.meetingsFolderName).onChange(async (value) => {
-        this.plugin.settings.meetingsFolderName = value.trim() || "Meetings";
-        await this.plugin.savePluginSettings();
-      })
+      text
+        .setValue(this.plugin.settings.meetingsFolderName)
+        .onChange(async (value) => {
+          this.plugin.settings.meetingsFolderName = value.trim() || "Meetings";
+          await this.plugin.savePluginSettings();
+        }),
     );
 
     new Setting(containerEl).setName("Ideas folder").addText((text) =>
-      text.setValue(this.plugin.settings.ideasFolderName).onChange(async (value) => {
-        this.plugin.settings.ideasFolderName = value.trim() || "Ideas";
-        await this.plugin.savePluginSettings();
-      })
+      text
+        .setValue(this.plugin.settings.ideasFolderName)
+        .onChange(async (value) => {
+          this.plugin.settings.ideasFolderName = value.trim() || "Ideas";
+          await this.plugin.savePluginSettings();
+        }),
     );
 
     new Setting(containerEl).setName("Customers folder").addText((text) =>
-      text.setValue(this.plugin.settings.customersFolderName).onChange(async (value) => {
-        this.plugin.settings.customersFolderName = value.trim() || "Customers";
-        await this.plugin.savePluginSettings();
-      })
+      text
+        .setValue(this.plugin.settings.customersFolderName)
+        .onChange(async (value) => {
+          this.plugin.settings.customersFolderName =
+            value.trim() || "Customers";
+          await this.plugin.savePluginSettings();
+        }),
     );
 
     containerEl.createEl("h3", { text: "Auto-tagging" });
 
     new Setting(containerEl)
       .setName("Enable auto-tagging")
-      .setDesc("Automatically extract customers, topics, and action items from meeting content.")
+      .setDesc(
+        "Automatically extract customers, topics, and action items from meeting content.",
+      )
       .addToggle((toggle) =>
-        toggle.setValue(this.plugin.settings.autoTagEnabled).onChange(async (value) => {
-          this.plugin.settings.autoTagEnabled = value;
-          await this.plugin.savePluginSettings();
-        })
+        toggle
+          .setValue(this.plugin.settings.autoTagEnabled)
+          .onChange(async (value) => {
+            this.plugin.settings.autoTagEnabled = value;
+            await this.plugin.savePluginSettings();
+          }),
       );
 
     new Setting(containerEl)
       .setName("Known customers")
-      .setDesc("Comma-separated list of customer/company names to detect in meeting notes.")
+      .setDesc(
+        "Comma-separated list of customer/company names to detect in meeting notes.",
+      )
       .addTextArea((text) =>
         text
           .setPlaceholder("Acme Corp, BigCo, Startup XYZ")
@@ -132,7 +183,7 @@ export class GranolaAdoraSettingTab extends PluginSettingTab {
               .filter((s) => s.length > 0);
             await this.plugin.savePluginSettings();
             this.plugin.updateTaggerConfig();
-          })
+          }),
       );
 
     new Setting(containerEl)
@@ -153,7 +204,7 @@ export class GranolaAdoraSettingTab extends PluginSettingTab {
               .filter((s) => s.length > 0);
             await this.plugin.savePluginSettings();
             this.plugin.updateTaggerConfig();
-          })
+          }),
       );
 
     containerEl.createEl("h3", { text: "Advanced" });
@@ -170,7 +221,7 @@ export class GranolaAdoraSettingTab extends PluginSettingTab {
             this.plugin.settings.syncedDocIds = [];
             await this.plugin.savePluginSettings();
             new Notice("Sync state reset. Next sync will import all notes.");
-          })
+          }),
       );
   }
 }

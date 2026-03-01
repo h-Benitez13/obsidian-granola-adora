@@ -1,11 +1,13 @@
-import { GranolaDocument, ExtractedTags } from "./types";
+import { GranolaDocument, ExtractedTags, getAttendeeName } from "./types";
 
 export class AutoTagger {
   private knownCustomers: Set<string>;
   private knownTopics: Set<string>;
 
   constructor(knownCustomers: string[], knownTopics: string[]) {
-    this.knownCustomers = new Set(knownCustomers.map((c) => c.toLowerCase().trim()));
+    this.knownCustomers = new Set(
+      knownCustomers.map((c) => c.toLowerCase().trim()),
+    );
     this.knownTopics = new Set(knownTopics.map((t) => t.toLowerCase().trim()));
   }
 
@@ -25,11 +27,14 @@ export class AutoTagger {
       customers: this.extractCustomers(contentLower, doc),
       topics: this.extractTopics(contentLower),
       actionItems: this.extractActionItems(content),
-      people: this.extractPeople(doc)
+      people: this.extractPeople(doc),
     };
   }
 
-  private extractCustomers(contentLower: string, doc: GranolaDocument): string[] {
+  private extractCustomers(
+    contentLower: string,
+    doc: GranolaDocument,
+  ): string[] {
     const found: Set<string> = new Set();
 
     for (const customer of this.knownCustomers) {
@@ -46,7 +51,7 @@ export class AutoTagger {
       "icloud.com",
       "me.com",
       "live.com",
-      "adora-ai.com"
+      "adora-ai.com",
     ]);
 
     const attendees = doc.people?.attendees ?? [];
@@ -83,7 +88,10 @@ export class AutoTagger {
       ) {
         const cleaned = trimmed
           .replace(/^[-*]\s*\[[ x]\]\s+/i, "")
-          .replace(/^(action item|todo|to-do|follow[- ]?up|next step)s?:\s*/i, "")
+          .replace(
+            /^(action item|todo|to-do|follow[- ]?up|next step)s?:\s*/i,
+            "",
+          )
           .replace(/^[-*]\s*(action|todo|follow[- ]?up):\s*/i, "")
           .trim();
 
@@ -104,9 +112,7 @@ export class AutoTagger {
     }
 
     for (const attendee of doc.people?.attendees ?? []) {
-      if (attendee.name) {
-        people.add(attendee.name);
-      }
+      people.add(getAttendeeName(attendee));
     }
 
     return [...people];

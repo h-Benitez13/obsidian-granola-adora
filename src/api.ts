@@ -1,5 +1,12 @@
 import { requestUrl, RequestUrlParam, Platform } from "obsidian";
-import { GranolaDocument, GranolaListResponse, GranolaTranscriptEntry } from "./types";
+import {
+  GranolaDocument,
+  GranolaListResponse,
+  GranolaSharedResponse,
+  GranolaDocumentList,
+  GranolaDocumentListsResponse,
+  GranolaTranscriptEntry,
+} from "./types";
 
 const API_BASE = "https://api.granola.ai";
 const CLIENT_VERSION = "5.354.0";
@@ -13,22 +20,23 @@ export class GranolaApiClient {
     return this.token !== null;
   }
 
-  async fetchAllDocuments(): Promise<GranolaDocument[]> {
-    if (!this.token) {
-      throw new Error("Not authenticated. Open Granola desktop app and sign in first.");
-    }
+  async fetchMyDocuments(): Promise<GranolaDocument[]> {
+    this.requireAuth();
 
     const allDocs: GranolaDocument[] = [];
     let offset = 0;
     let hasMore = true;
 
     while (hasMore) {
-      const response = await this.postRequest<GranolaListResponse>("/v2/get-documents", {
-        limit: PAGE_SIZE,
-        offset,
-        include_last_viewed_panel: false,
-        include_panels: false
-      });
+      const response = await this.postRequest<GranolaListResponse>(
+        "/v2/get-documents",
+        {
+          limit: PAGE_SIZE,
+          offset,
+          include_last_viewed_panel: false,
+          include_panels: false,
+        },
+      );
 
       allDocs.push(...response.docs);
 
@@ -43,15 +51,47 @@ export class GranolaApiClient {
     return allDocs;
   }
 
-  async fetchTranscript(documentId: string): Promise<GranolaTranscriptEntry[]> {
-    if (!this.token) {
-      throw new Error("Not authenticated.");
-    }
-
-    return this.postRequest<GranolaTranscriptEntry[]>("/v1/get-document-transcript", { document_id: documentId });
+  async fetchSharedDocuments(): Promise<GranolaDocument[]> {
+    this.requireAuth();
+    const response = await this.postRequest<GranolaSharedResponse>(
+      "/v1/get-shared-documents",
+      {
+        limit: PAGE_SIZE,
+        offset: 0,
+      },
+    );
+    return response.docs.map((d) => ({ ...d, _shared: true }));
   }
 
-  private async postRequest<T>(path: string, body: Record<string, unknown>): Promise<T> {
+  async fetchDocumentLists(): Promise<GranolaDocumentList[]> {
+    this.requireAuth();
+    const response = await this.postRequest<GranolaDocumentListsResponse>(
+      "/v2/get-document-lists",
+      {},
+    );
+    return response.lists;
+  }
+
+  async fetchTranscript(documentId: string): Promise<GranolaTranscriptEntry[]> {
+    this.requireAuth();
+    return this.postRequest<GranolaTranscriptEntry[]>(
+      "/v1/get-document-transcript",
+      { document_id: documentId },
+    );
+  }
+
+  private requireAuth(): void {
+    if (!this.token) {
+      throw new Error(
+        "Not authenticated. Open Granola desktop app and sign in first.",
+      );
+    }
+  }
+
+  private async postRequest<T>(
+    path: string,
+    body: Record<string, unknown>,
+  ): Promise<T> {
     const params: RequestUrlParam = {
       url: `${API_BASE}${path}`,
       method: "POST",
@@ -60,9 +100,9 @@ export class GranolaApiClient {
         "Content-Type": "application/json",
         Accept: "*/*",
         "User-Agent": `Granola/${CLIENT_VERSION}`,
-        "X-Client-Version": CLIENT_VERSION
+        "X-Client-Version": CLIENT_VERSION,
       },
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
     };
 
     const response = await requestUrl(params);
@@ -82,12 +122,25 @@ export class GranolaApiClient {
 
       let credPath: string;
       if (Platform.isMacOS) {
-        credPath = nodePath.join(os.homedir(), "Library", "Application Support", "Granola", "supabase.json");
+        credPath = nodePath.join(
+          os.homedir(),
+          "Library",
+          "Application Support",
+          "Granola",
+          "supabase.json",
+        );
       } else if (Platform.isWin) {
-        const appData = process.env["APPDATA"] ?? nodePath.join(os.homedir(), "AppData", "Roaming");
+        const appData =
+          process.env["APPDATA"] ??
+          nodePath.join(os.homedir(), "AppData", "Roaming");
         credPath = nodePath.join(appData, "Granola", "supabase.json");
       } else {
-        credPath = nodePath.join(os.homedir(), ".config", "Granola", "supabase.json");
+        credPath = nodePath.join(
+          os.homedir(),
+          ".config",
+          "Granola",
+          "supabase.json",
+        );
       }
 
       if (!fs.existsSync(credPath)) {
