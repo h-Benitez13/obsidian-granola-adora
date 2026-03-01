@@ -1,4 +1,9 @@
-import { GranolaDocument, ExtractedTags, getAttendeeName } from "./types";
+import {
+  GranolaDocument,
+  ExtractedTags,
+  getAttendeeName,
+  getAttendeeCompany,
+} from "./types";
 
 export class AutoTagger {
   private knownCustomers: Set<string>;
@@ -59,6 +64,14 @@ export class AutoTagger {
       const domain = attendee.email.split("@")[1];
       if (domain && !commonDomains.has(domain)) {
         found.add(domain.split(".")[0]);
+      }
+    }
+
+    // Extract company names from attendee details
+    for (const attendee of attendees) {
+      const companyName = getAttendeeCompany(attendee);
+      if (companyName && !companyName.toLowerCase().includes("adora")) {
+        found.add(companyName);
       }
     }
 

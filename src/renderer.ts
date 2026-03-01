@@ -1,4 +1,9 @@
-import { GranolaDocument, ExtractedTags, getAttendeeName } from "./types";
+import {
+  GranolaDocument,
+  ExtractedTags,
+  getAttendeeName,
+  getAttendeeCompany,
+} from "./types";
 
 const HORIZONTAL_RULE = "\n---\n";
 
@@ -123,7 +128,12 @@ function renderAttendees(doc: GranolaDocument): string {
   const lines: string[] = ["## Attendees\n"];
   for (const person of attendees) {
     const name = getAttendeeName(person);
-    lines.push(`- [[${name}]] (${person.email})`);
+    const company = getAttendeeCompany(person);
+    if (company) {
+      lines.push(`- [[${name}]] (${person.email}) — ${company}`);
+    } else {
+      lines.push(`- [[${name}]] (${person.email})`);
+    }
   }
   lines.push("");
   return lines.join("\n");
