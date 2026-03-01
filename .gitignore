@@ -1,0 +1,12 @@
+# Build output
+main.js
+*.js.map
+
+# Node
+node_modules/
+
+# Obsidian
+data.json
+
+# OS
+.DS_Store

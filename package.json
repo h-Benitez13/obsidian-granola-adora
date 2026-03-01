@@ -1,0 +1,25 @@
+{
+  "name": "obsidian-granola-adora",
+  "version": "0.1.0",
+  "description": "Granola meeting notes integration for Adora AI's Obsidian knowledge base",
+  "main": "main.js",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production"
+  },
+  "keywords": [
+    "obsidian",
+    "granola",
+    "meeting-notes",
+    "knowledge-graph"
+  ],
+  "author": "Adora AI",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "builtin-modules": "^4.0.0",
+    "esbuild": "^0.24.0",
+    "obsidian": "latest",
+    "typescript": "^5.6.0"
+  }
+}

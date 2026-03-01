@@ -1,0 +1,10 @@
+{
+  "id": "granola-adora",
+  "name": "Granola for Adora",
+  "version": "0.1.0",
+  "minAppVersion": "1.5.0",
+  "description": "Sync Granola meeting notes into Obsidian and build a connected knowledge graph for ideas, customer feedback, and priorities.",
+  "author": "Adora AI",
+  "authorUrl": "https://adora.ai",
+  "isDesktopOnly": false
+}
