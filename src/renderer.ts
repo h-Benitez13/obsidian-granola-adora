@@ -1,14 +1,14 @@
-import { GranolaNote, ExtractedTags } from "./types";
+import { GranolaDocument, ExtractedTags } from "./types";
 
 const HORIZONTAL_RULE = "\n---\n";
 
-export function renderMeetingNote(note: GranolaNote, tags: ExtractedTags, includeTranscript: boolean): string {
+export function renderMeetingNote(doc: GranolaDocument, tags: ExtractedTags, includeTranscript: boolean): string {
   const parts: string[] = [];
 
-  parts.push(renderFrontmatter(note, tags));
-  parts.push(renderHeader(note));
-  parts.push(renderAttendees(note));
-  parts.push(renderSummary(note));
+  parts.push(renderFrontmatter(doc, tags));
+  parts.push(renderHeader(doc));
+  parts.push(renderAttendees(doc));
+  parts.push(renderSummary(doc));
 
   if (tags.actionItems.length > 0) {
     parts.push(renderActionItems(tags.actionItems));
@@ -18,31 +18,31 @@ export function renderMeetingNote(note: GranolaNote, tags: ExtractedTags, includ
     parts.push(renderTagsSection(tags));
   }
 
-  if (includeTranscript && note.transcript && note.transcript.length > 0) {
-    parts.push(renderTranscript(note));
+  if (includeTranscript && doc.transcript && doc.transcript.length > 0) {
+    parts.push(renderTranscript(doc));
   }
 
   return parts.join("\n");
 }
 
-function renderFrontmatter(note: GranolaNote, tags: ExtractedTags): string {
+function renderFrontmatter(doc: GranolaDocument, tags: ExtractedTags): string {
   const fm: Record<string, string | string[] | boolean | null> = {
-    granola_id: note.id,
-    title: note.title ?? "Untitled Meeting",
-    date: note.created_at,
-    updated: note.updated_at,
+    granola_id: doc.id,
+    title: doc.title ?? "Untitled Meeting",
+    date: doc.created_at,
+    updated: doc.updated_at,
     type: "meeting"
   };
 
-  if (note.owner.name) {
-    fm["owner"] = note.owner.name;
+  if (doc.people?.creator?.name) {
+    fm["owner"] = doc.people.creator.name;
   }
 
-  if (note.calendar_event?.scheduled_start_time) {
-    fm["scheduled_start"] = note.calendar_event.scheduled_start_time;
+  if (doc.google_calendar_event?.start) {
+    fm["scheduled_start"] = doc.google_calendar_event.start;
   }
-  if (note.calendar_event?.scheduled_end_time) {
-    fm["scheduled_end"] = note.calendar_event.scheduled_end_time;
+  if (doc.google_calendar_event?.end) {
+    fm["scheduled_end"] = doc.google_calendar_event.end;
   }
 
   const allTags = ["meeting", "granola"];
@@ -60,10 +60,6 @@ function renderFrontmatter(note: GranolaNote, tags: ExtractedTags): string {
 
   if (tags.customers.length > 0) {
     fm["customers"] = tags.customers;
-  }
-
-  if (note.folder_membership.length > 0) {
-    fm["granola_folders"] = note.folder_membership.map((f) => f.name);
   }
 
   fm["synced"] = new Date().toISOString();
@@ -87,54 +83,54 @@ function renderFrontmatter(note: GranolaNote, tags: ExtractedTags): string {
   return lines.join("\n");
 }
 
-function renderHeader(note: GranolaNote): string {
-  const title = note.title ?? "Untitled Meeting";
+function renderHeader(doc: GranolaDocument): string {
+  const title = doc.title ?? "Untitled Meeting";
   const lines: string[] = [`\n# ${title}\n`];
 
-  if (note.calendar_event) {
-    const event = note.calendar_event;
-    if (event.scheduled_start_time) {
-      const start = new Date(event.scheduled_start_time);
-      const dateStr = start.toLocaleDateString("en-US", {
-        weekday: "long",
-        year: "numeric",
-        month: "long",
-        day: "numeric"
-      });
-      const timeStr = start.toLocaleTimeString("en-US", {
-        hour: "2-digit",
-        minute: "2-digit"
-      });
-      lines.push(`> ${dateStr} at ${timeStr}\n`);
-    }
+  if (doc.google_calendar_event?.start) {
+    const start = new Date(doc.google_calendar_event.start);
+    const dateStr = start.toLocaleDateString("en-US", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric"
+    });
+    const timeStr = start.toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+    lines.push(`> ${dateStr} at ${timeStr}\n`);
   }
 
   return lines.join("\n");
 }
 
-function renderAttendees(note: GranolaNote): string {
-  const attendees = note.attendees;
+function renderAttendees(doc: GranolaDocument): string {
+  const attendees = doc.people?.attendees ?? [];
   if (attendees.length === 0) return "";
 
   const lines: string[] = ["## Attendees\n"];
   for (const person of attendees) {
     const name = person.name ?? person.email;
-    const link = `[[${name}]]`;
-    lines.push(`- ${link} (${person.email})`);
+    lines.push(`- [[${name}]] (${person.email})`);
   }
   lines.push("");
   return lines.join("\n");
 }
 
-function renderSummary(note: GranolaNote): string {
-  const lines: string[] = ["## Summary\n"];
+function renderSummary(doc: GranolaDocument): string {
+  const lines: string[] = ["## Notes\n"];
 
-  if (note.summary_markdown) {
-    lines.push(note.summary_markdown);
-  } else if (note.summary_text) {
-    lines.push(note.summary_text);
+  if (doc.notes_markdown) {
+    lines.push(doc.notes_markdown);
+  } else if (doc.overview) {
+    lines.push(doc.overview);
+  } else if (doc.summary) {
+    lines.push(doc.summary);
+  } else if (doc.notes_plain) {
+    lines.push(doc.notes_plain);
   } else {
-    lines.push("*No summary available.*");
+    lines.push("*No notes available.*");
   }
 
   lines.push("");
@@ -165,14 +161,14 @@ function renderTagsSection(tags: ExtractedTags): string {
   return lines.join("\n");
 }
 
-function renderTranscript(note: GranolaNote): string {
-  if (!note.transcript || note.transcript.length === 0) return "";
+function renderTranscript(doc: GranolaDocument): string {
+  if (!doc.transcript || doc.transcript.length === 0) return "";
 
   const lines: string[] = [HORIZONTAL_RULE, "## Transcript\n"];
 
-  for (const entry of note.transcript) {
-    const speaker = entry.speaker.source === "microphone" ? "You" : "Participant";
-    const time = new Date(entry.start_time).toLocaleTimeString("en-US", {
+  for (const entry of doc.transcript) {
+    const speaker = entry.source === "microphone" ? "You" : "Participant";
+    const time = new Date(entry.start_timestamp).toLocaleTimeString("en-US", {
       hour: "2-digit",
       minute: "2-digit",
       second: "2-digit"
@@ -232,17 +228,15 @@ export function renderCustomerNote(customerName: string): string {
     "*Add customer details here...*",
     "",
     "## Meeting History\n",
-    `\`\`\`dataview`,
+    "```dataview",
     `TABLE date as "Date", title as "Meeting"`,
     `FROM "Adora/Meetings"`,
     `WHERE contains(customers, "${escapeYaml(customerName)}")`,
     `SORT date DESC`,
-    `\`\`\``,
+    "```",
     "",
     "## Feedback & Requests\n",
     "- ",
-    "",
-    "## Notes\n",
     ""
   ];
 

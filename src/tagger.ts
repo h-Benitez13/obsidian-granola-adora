@@ -1,14 +1,5 @@
-import { GranolaNote, ExtractedTags } from "./types";
+import { GranolaDocument, ExtractedTags } from "./types";
 
-/**
- * Auto-tagger — extracts structured metadata from Granola meeting notes.
- *
- * Extracts:
- * - Customer / company mentions (matched against known list + heuristics)
- * - Topic / product area tags (matched against known list)
- * - Action items (lines starting with action-item patterns)
- * - People mentioned (from attendees + content parsing)
- */
 export class AutoTagger {
   private knownCustomers: Set<string>;
   private knownTopics: Set<string>;
@@ -26,34 +17,27 @@ export class AutoTagger {
     this.knownTopics = new Set(topics.map((t) => t.toLowerCase().trim()));
   }
 
-  /**
-   * Extract all tags from a Granola note.
-   */
-  extract(note: GranolaNote): ExtractedTags {
-    const content = this.getSearchableContent(note);
+  extract(doc: GranolaDocument): ExtractedTags {
+    const content = this.getSearchableContent(doc);
     const contentLower = content.toLowerCase();
 
     return {
-      customers: this.extractCustomers(contentLower, note),
+      customers: this.extractCustomers(contentLower, doc),
       topics: this.extractTopics(contentLower),
       actionItems: this.extractActionItems(content),
-      people: this.extractPeople(note)
+      people: this.extractPeople(doc)
     };
   }
 
-  // ─── Private Extraction Methods ───────────────────────────────────
-
-  private extractCustomers(contentLower: string, note: GranolaNote): string[] {
+  private extractCustomers(contentLower: string, doc: GranolaDocument): string[] {
     const found: Set<string> = new Set();
 
-    // Match against known customer list
     for (const customer of this.knownCustomers) {
       if (contentLower.includes(customer)) {
         found.add(customer);
       }
     }
 
-    // Also check attendee email domains (skip common providers)
     const commonDomains = new Set([
       "gmail.com",
       "outlook.com",
@@ -62,24 +46,14 @@ export class AutoTagger {
       "icloud.com",
       "me.com",
       "live.com",
-      "adora.ai"
+      "adora-ai.com"
     ]);
 
-    for (const attendee of note.attendees) {
+    const attendees = doc.people?.attendees ?? [];
+    for (const attendee of attendees) {
       const domain = attendee.email.split("@")[1];
       if (domain && !commonDomains.has(domain)) {
-        const companyName = domain.split(".")[0];
-        found.add(companyName);
-      }
-    }
-
-    if (note.calendar_event) {
-      for (const invitee of note.calendar_event.invitees) {
-        const domain = invitee.email.split("@")[1];
-        if (domain && !commonDomains.has(domain)) {
-          const companyName = domain.split(".")[0];
-          found.add(companyName);
-        }
+        found.add(domain.split(".")[0]);
       }
     }
 
@@ -88,13 +62,11 @@ export class AutoTagger {
 
   private extractTopics(contentLower: string): string[] {
     const found: Set<string> = new Set();
-
     for (const topic of this.knownTopics) {
       if (contentLower.includes(topic)) {
         found.add(topic);
       }
     }
-
     return [...found];
   }
 
@@ -104,10 +76,8 @@ export class AutoTagger {
 
     for (const line of lines) {
       const trimmed = line.trim();
-
-      // Match common action item patterns
       if (
-        /^[-*]\s*\[[ x]\]\s+/i.test(trimmed) || // - [ ] task or - [x] task
+        /^[-*]\s*\[[ x]\]\s+/i.test(trimmed) ||
         /^(action item|todo|to-do|follow[- ]?up|next step)s?:/i.test(trimmed) ||
         /^[-*]\s*(action|todo|follow[- ]?up):/i.test(trimmed)
       ) {
@@ -126,44 +96,31 @@ export class AutoTagger {
     return actionItems;
   }
 
-  private extractPeople(note: GranolaNote): string[] {
+  private extractPeople(doc: GranolaDocument): string[] {
     const people: Set<string> = new Set();
 
-    // Owner
-    if (note.owner.name) {
-      people.add(note.owner.name);
+    if (doc.people?.creator?.name) {
+      people.add(doc.people.creator.name);
     }
 
-    // Attendees
-    for (const attendee of note.attendees) {
+    for (const attendee of doc.people?.attendees ?? []) {
       if (attendee.name) {
         people.add(attendee.name);
-      }
-    }
-
-    // Calendar invitees
-    if (note.calendar_event) {
-      for (const invitee of note.calendar_event.invitees) {
-        if (invitee.name) {
-          people.add(invitee.name);
-        }
       }
     }
 
     return [...people];
   }
 
-  private getSearchableContent(note: GranolaNote): string {
+  private getSearchableContent(doc: GranolaDocument): string {
     const parts: string[] = [];
-
-    if (note.title) parts.push(note.title);
-    if (note.summary_markdown) parts.push(note.summary_markdown);
-    if (note.summary_text) parts.push(note.summary_text);
-
-    if (note.calendar_event?.event_title) {
-      parts.push(note.calendar_event.event_title);
+    if (doc.title) parts.push(doc.title);
+    if (doc.notes_markdown) parts.push(doc.notes_markdown);
+    if (doc.overview) parts.push(doc.overview);
+    if (doc.summary) parts.push(doc.summary);
+    if (doc.google_calendar_event?.summary) {
+      parts.push(doc.google_calendar_event.summary);
     }
-
     return parts.join("\n\n");
   }
 }

@@ -1,114 +1,111 @@
-import { requestUrl, RequestUrlParam } from "obsidian";
-import { GranolaNote, GranolaListResponse } from "./types";
+import { requestUrl, RequestUrlParam, Platform } from "obsidian";
+import { GranolaDocument, GranolaListResponse, GranolaTranscriptEntry } from "./types";
 
-const BASE_URL = "https://public-api.granola.ai";
-const MAX_PAGE_SIZE = 30;
+const API_BASE = "https://api.granola.ai";
+const CLIENT_VERSION = "5.354.0";
+const PAGE_SIZE = 100;
 
-/**
- * Granola Enterprise API client.
- *
- * Uses Obsidian's built-in `requestUrl` so network calls work on all
- * platforms (desktop + mobile) without CORS issues.
- *
- * Rate limits: 25 burst / 5 per second — we add a small delay between
- * paginated fetches to stay well within limits.
- */
 export class GranolaApiClient {
-  private apiKey: string;
+  private token: string | null = null;
 
-  constructor(apiKey: string) {
-    this.apiKey = apiKey;
+  async ensureAuthenticated(): Promise<boolean> {
+    this.token = this.readLocalToken();
+    return this.token !== null;
   }
 
-  /** Update the API key (e.g. when user changes settings). */
-  setApiKey(apiKey: string): void {
-    this.apiKey = apiKey;
-  }
+  async fetchAllDocuments(): Promise<GranolaDocument[]> {
+    if (!this.token) {
+      throw new Error("Not authenticated. Open Granola desktop app and sign in first.");
+    }
 
-  // ─── Public Methods ───────────────────────────────────────────────
+    const allDocs: GranolaDocument[] = [];
+    let offset = 0;
+    let hasMore = true;
 
-  /**
-   * Fetch all notes, optionally filtering by updated_after for incremental sync.
-   * Handles pagination automatically.
-   */
-  async fetchAllNotes(updatedAfter?: string): Promise<GranolaNote[]> {
-    const allNotes: GranolaNote[] = [];
-    let cursor: string | null = null;
-
-    do {
-      const response = await this.listNotes({
-        updatedAfter,
-        cursor: cursor ?? undefined,
-        pageSize: MAX_PAGE_SIZE
+    while (hasMore) {
+      const response = await this.postRequest<GranolaListResponse>("/v2/get-documents", {
+        limit: PAGE_SIZE,
+        offset,
+        include_last_viewed_panel: false,
+        include_panels: false
       });
 
-      allNotes.push(...response.data);
-      cursor = response.next_cursor;
+      allDocs.push(...response.docs);
 
-      // Respect rate limits — small pause between pages
-      if (cursor) {
+      if (response.docs.length < PAGE_SIZE || !response.next_cursor) {
+        hasMore = false;
+      } else {
+        offset += PAGE_SIZE;
         await this.sleep(250);
       }
-    } while (cursor);
-
-    return allNotes;
-  }
-
-  /**
-   * Fetch a single note by ID, optionally including the full transcript.
-   */
-  async fetchNote(noteId: string, includeTranscript = false): Promise<GranolaNote> {
-    const params: Record<string, string> = {};
-    if (includeTranscript) {
-      params["include"] = "transcript";
-    }
-    return this.request<GranolaNote>(`/v1/notes/${noteId}`, params);
-  }
-
-  // ─── Private Helpers ──────────────────────────────────────────────
-
-  private async listNotes(options: {
-    updatedAfter?: string;
-    createdAfter?: string;
-    createdBefore?: string;
-    cursor?: string;
-    pageSize?: number;
-  }): Promise<GranolaListResponse> {
-    const params: Record<string, string> = {};
-
-    if (options.updatedAfter) params["updated_after"] = options.updatedAfter;
-    if (options.createdAfter) params["created_after"] = options.createdAfter;
-    if (options.createdBefore) params["created_before"] = options.createdBefore;
-    if (options.cursor) params["cursor"] = options.cursor;
-    if (options.pageSize) params["page_size"] = String(options.pageSize);
-
-    return this.request<GranolaListResponse>("/v1/notes", params);
-  }
-
-  private async request<T>(path: string, params?: Record<string, string>): Promise<T> {
-    let url = `${BASE_URL}${path}`;
-
-    if (params && Object.keys(params).length > 0) {
-      const query = new URLSearchParams(params).toString();
-      url = `${url}?${query}`;
     }
 
-    const reqParams: RequestUrlParam = {
-      url,
-      method: "GET",
+    return allDocs;
+  }
+
+  async fetchTranscript(documentId: string): Promise<GranolaTranscriptEntry[]> {
+    if (!this.token) {
+      throw new Error("Not authenticated.");
+    }
+
+    return this.postRequest<GranolaTranscriptEntry[]>("/v1/get-document-transcript", { document_id: documentId });
+  }
+
+  private async postRequest<T>(path: string, body: Record<string, unknown>): Promise<T> {
+    const params: RequestUrlParam = {
+      url: `${API_BASE}${path}`,
+      method: "POST",
       headers: {
-        Authorization: `Bearer ${this.apiKey}`,
-        "Content-Type": "application/json"
-      }
+        Authorization: `Bearer ${this.token}`,
+        "Content-Type": "application/json",
+        Accept: "*/*",
+        "User-Agent": `Granola/${CLIENT_VERSION}`,
+        "X-Client-Version": CLIENT_VERSION
+      },
+      body: JSON.stringify(body)
     };
 
-    const response = await requestUrl(reqParams);
+    const response = await requestUrl(params);
 
     if (response.status >= 400) {
       throw new Error(`Granola API error ${response.status}: ${response.text}`);
     }
 
     return response.json as T;
+  }
+
+  private readLocalToken(): string | null {
+    try {
+      const fs = require("fs") as typeof import("fs");
+      const nodePath = require("path") as typeof import("path");
+      const os = require("os") as typeof import("os");
+
+      let credPath: string;
+      if (Platform.isMacOS) {
+        credPath = nodePath.join(os.homedir(), "Library", "Application Support", "Granola", "supabase.json");
+      } else if (Platform.isWin) {
+        const appData = process.env["APPDATA"] ?? nodePath.join(os.homedir(), "AppData", "Roaming");
+        credPath = nodePath.join(appData, "Granola", "supabase.json");
+      } else {
+        credPath = nodePath.join(os.homedir(), ".config", "Granola", "supabase.json");
+      }
+
+      if (!fs.existsSync(credPath)) {
+        return null;
+      }
+
+      const fileContent = fs.readFileSync(credPath, "utf-8");
+      const data = JSON.parse(fileContent);
+
+      if (!data.workos_tokens) {
+        return null;
+      }
+
+      const workosTokens = JSON.parse(data.workos_tokens);
+      return workosTokens.access_token ?? null;
+    } catch {
+      return null;
+    }
   }
 
   private sleep(ms: number): Promise<void> {

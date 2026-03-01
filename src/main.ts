@@ -1,4 +1,4 @@
-import { Notice, Plugin } from "obsidian";
+import { Notice, Plugin, normalizePath, TFile } from "obsidian";
 import { GranolaAdoraSettings, DEFAULT_SETTINGS } from "./types";
 import { GranolaApiClient } from "./api";
 import { AutoTagger } from "./tagger";
@@ -9,7 +9,7 @@ import { IdeaFromMeetingModal } from "./modals";
 
 export default class GranolaAdoraPlugin extends Plugin {
   settings: GranolaAdoraSettings = DEFAULT_SETTINGS;
-  private api: GranolaApiClient = new GranolaApiClient("");
+  private api: GranolaApiClient = new GranolaApiClient();
   private tagger: AutoTagger = new AutoTagger([], []);
   private syncEngine!: SyncEngine;
   private autoSyncIntervalId: number | null = null;
@@ -18,7 +18,6 @@ export default class GranolaAdoraPlugin extends Plugin {
   async onload(): Promise<void> {
     await this.loadPluginSettings();
 
-    this.api = new GranolaApiClient(this.settings.apiKey);
     this.tagger = new AutoTagger(this.settings.knownCustomers, this.settings.knownTopics);
     this.syncEngine = new SyncEngine(
       this.app,
@@ -51,13 +50,13 @@ export default class GranolaAdoraPlugin extends Plugin {
       name: "Full re-sync (reset and re-import all)",
       callback: async () => {
         this.settings.lastSyncTimestamp = null;
-        this.settings.syncedNoteIds = [];
+        this.settings.syncedDocIds = [];
         await this.savePluginSettings();
         await this.runSync();
       }
     });
 
-    if (this.settings.syncOnStartup && this.settings.apiKey) {
+    if (this.settings.syncOnStartup) {
       setTimeout(() => this.runSync(), 3000);
     }
 
@@ -77,6 +76,10 @@ export default class GranolaAdoraPlugin extends Plugin {
     await this.saveData(this.settings);
   }
 
+  async checkAuth(): Promise<boolean> {
+    return this.api.ensureAuthenticated();
+  }
+
   updateTaggerConfig(): void {
     this.tagger.updateKnownCustomers(this.settings.knownCustomers);
     this.tagger.updateKnownTopics(this.settings.knownTopics);
@@ -84,12 +87,9 @@ export default class GranolaAdoraPlugin extends Plugin {
 
   startAutoSync(): void {
     this.stopAutoSync();
-
-    if (this.settings.syncIntervalMinutes > 0 && this.settings.apiKey) {
+    if (this.settings.syncIntervalMinutes > 0) {
       const ms = this.settings.syncIntervalMinutes * 60 * 1000;
-      this.autoSyncIntervalId = window.setInterval(() => {
-        this.runSync();
-      }, ms);
+      this.autoSyncIntervalId = window.setInterval(() => this.runSync(), ms);
       this.registerInterval(this.autoSyncIntervalId);
     }
   }
@@ -106,18 +106,18 @@ export default class GranolaAdoraPlugin extends Plugin {
   }
 
   private async runSync(): Promise<void> {
-    if (!this.settings.apiKey) {
-      new Notice("Granola: Please set your API key in plugin settings.");
-      return;
-    }
-
     if (this.isSyncing) {
       new Notice("Granola: Sync already in progress.");
       return;
     }
 
+    const authenticated = await this.api.ensureAuthenticated();
+    if (!authenticated) {
+      new Notice("Granola: Could not find local session. Make sure Granola desktop app is open and you're signed in.");
+      return;
+    }
+
     this.isSyncing = true;
-    this.api.setApiKey(this.settings.apiKey);
 
     try {
       new Notice("Granola: Starting sync...");
@@ -137,21 +137,18 @@ export default class GranolaAdoraPlugin extends Plugin {
   }
 
   private createIdeaFromMeeting(): void {
-    const modal = new IdeaFromMeetingModal(this.app, async (title, meetingPaths) => {
+    const modal = new IdeaFromMeetingModal(this.app, async (title: string, meetingPaths: string[]) => {
       const { baseFolderPath, ideasFolderName } = this.settings;
       const fileName = title.replace(/[<>:"/\\|?*]/g, "-").substring(0, 80);
-      const filePath = `${baseFolderPath}/${ideasFolderName}/${fileName}.md`;
-
+      const filePath = normalizePath(`${baseFolderPath}/${ideasFolderName}/${fileName}.md`);
       const content = renderIdeaNote(title, meetingPaths);
 
       try {
-        const { normalizePath } = await import("obsidian");
-        const normalized = normalizePath(filePath);
-        await this.app.vault.create(normalized, content);
-        const file = this.app.vault.getAbstractFileByPath(normalized);
-        if (file) {
+        await this.app.vault.create(filePath, content);
+        const file = this.app.vault.getAbstractFileByPath(filePath);
+        if (file instanceof TFile) {
           const leaf = this.app.workspace.getLeaf(false);
-          await leaf.openFile(file as import("obsidian").TFile);
+          await leaf.openFile(file);
         }
         new Notice(`Created idea: ${title}`);
       } catch (err) {

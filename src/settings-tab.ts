@@ -1,4 +1,4 @@
-import { App, PluginSettingTab, Setting } from "obsidian";
+import { App, Notice, PluginSettingTab, Setting } from "obsidian";
 import type GranolaAdoraPlugin from "./main";
 
 export class GranolaAdoraSettingTab extends PluginSettingTab {
@@ -15,28 +15,23 @@ export class GranolaAdoraSettingTab extends PluginSettingTab {
 
     containerEl.createEl("h2", { text: "Granola for Adora" });
 
-    new Setting(containerEl)
-      .setName("API key")
-      .setDesc("Your Granola Enterprise API key. Generate one at Settings > Workspaces > API.")
-      .addText((text) =>
-        text
-          .setPlaceholder("Enter your API key")
-          .setValue(this.plugin.settings.apiKey)
-          .then((t) => {
-            t.inputEl.type = "password";
-            t.inputEl.style.width = "300px";
-          })
-          .onChange(async (value) => {
-            this.plugin.settings.apiKey = value.trim();
-            await this.plugin.savePluginSettings();
-          })
-      );
+    const statusEl = containerEl.createEl("div", { cls: "setting-item" });
+    const statusText = statusEl.createEl("p");
+    this.plugin.checkAuth().then((connected) => {
+      if (connected) {
+        statusText.setText("Granola: Connected");
+        statusText.style.color = "var(--text-success)";
+      } else {
+        statusText.setText("Granola: Not found — open Granola desktop app and sign in");
+        statusText.style.color = "var(--text-error)";
+      }
+    });
 
     containerEl.createEl("h3", { text: "Sync" });
 
     new Setting(containerEl)
       .setName("Sync interval (minutes)")
-      .setDesc("How often to automatically pull new notes from Granola. Set to 0 to disable auto-sync.")
+      .setDesc("How often to automatically pull new notes. Set to 0 to disable auto-sync.")
       .addText((text) =>
         text
           .setPlaceholder("30")
@@ -172,9 +167,9 @@ export class GranolaAdoraSettingTab extends PluginSettingTab {
           .setWarning()
           .onClick(async () => {
             this.plugin.settings.lastSyncTimestamp = null;
-            this.plugin.settings.syncedNoteIds = [];
+            this.plugin.settings.syncedDocIds = [];
             await this.plugin.savePluginSettings();
-            new (await import("obsidian")).Notice("Sync state reset. Next sync will import all notes.");
+            new Notice("Sync state reset. Next sync will import all notes.");
           })
       );
   }

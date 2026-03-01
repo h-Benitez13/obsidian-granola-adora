@@ -1,68 +1,50 @@
-/**
- * Granola API data types — mirrors the public API schema at https://public-api.granola.ai
- */
-
-// ─── Granola API Response Types ─────────────────────────────────────────────
-
-export interface GranolaNote {
-  id: string; // Pattern: ^not_[a-zA-Z0-9]{14}$
-  object: "note";
+export interface GranolaDocument {
+  id: string;
   title: string | null;
-  owner: GranolaUser;
-  created_at: string; // ISO 8601
-  updated_at: string; // ISO 8601
-  calendar_event: GranolaCalendarEvent | null;
-  attendees: GranolaUser[];
-  folder_membership: GranolaFolder[];
-  summary_text: string;
-  summary_markdown: string | null;
+  created_at: string;
+  updated_at: string;
+  notes_markdown: string | null;
+  notes_plain: string | null;
+  overview: string | null;
+  summary: string | null;
+  people: GranolaPeople | null;
+  google_calendar_event: GranolaCalendarEvent | null;
   transcript: GranolaTranscriptEntry[] | null;
 }
 
-export interface GranolaUser {
+export interface GranolaPeople {
+  creator: GranolaPerson | null;
+  attendees: GranolaPerson[];
+}
+
+export interface GranolaPerson {
   name: string | null;
   email: string;
 }
 
 export interface GranolaCalendarEvent {
-  event_title: string | null;
-  invitees: GranolaCalendarInvitee[];
-  organiser: string | null; // email
-  calendar_event_id: string | null;
-  scheduled_start_time: string | null; // ISO 8601
-  scheduled_end_time: string | null; // ISO 8601
-}
-
-export interface GranolaCalendarInvitee {
-  name: string | null;
-  email: string;
+  id: string | null;
+  summary: string | null;
+  start?: string | null;
+  end?: string | null;
 }
 
 export interface GranolaTranscriptEntry {
-  speaker: {
-    source: "microphone" | "speaker";
-  };
+  document_id: string;
+  start_timestamp: string;
+  end_timestamp: string;
   text: string;
-  start_time: string;
-  end_time: string;
-}
-
-export interface GranolaFolder {
-  id: string; // Pattern: ^fol_[a-zA-Z0-9]{14}$
-  object: "folder";
-  name: string;
+  source: "microphone" | "speaker";
+  id: string;
+  is_final: boolean;
 }
 
 export interface GranolaListResponse {
-  object: "list";
-  data: GranolaNote[];
+  docs: GranolaDocument[];
   next_cursor: string | null;
 }
 
-// ─── Plugin Internal Types ──────────────────────────────────────────────────
-
 export interface GranolaAdoraSettings {
-  apiKey: string;
   syncIntervalMinutes: number;
   syncOnStartup: boolean;
   baseFolderPath: string;
@@ -72,14 +54,13 @@ export interface GranolaAdoraSettings {
   prioritiesFolderName: string;
   includeTranscript: boolean;
   autoTagEnabled: boolean;
-  knownCustomers: string[]; // company/person names to auto-detect
-  knownTopics: string[]; // product areas or themes to auto-detect
-  lastSyncTimestamp: string | null; // ISO 8601 — used for incremental sync
-  syncedNoteIds: string[]; // track which notes we've already synced
+  knownCustomers: string[];
+  knownTopics: string[];
+  lastSyncTimestamp: string | null;
+  syncedDocIds: string[];
 }
 
 export const DEFAULT_SETTINGS: GranolaAdoraSettings = {
-  apiKey: "",
   syncIntervalMinutes: 30,
   syncOnStartup: true,
   baseFolderPath: "Adora",
@@ -92,7 +73,7 @@ export const DEFAULT_SETTINGS: GranolaAdoraSettings = {
   knownCustomers: [],
   knownTopics: [],
   lastSyncTimestamp: null,
-  syncedNoteIds: []
+  syncedDocIds: []
 };
 
 export interface SyncResult {
