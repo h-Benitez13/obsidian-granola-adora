@@ -215,6 +215,12 @@ export default class GranolaAdoraPlugin extends Plugin {
       callback: () => this.importTeamConfigFromActiveFile(),
     });
 
+    this.addCommand({
+      id: "granola-team-one-step-setup",
+      name: "Team one-step setup (import + full sync)",
+      callback: () => this.runTeamOneStepSetup(),
+    });
+
     if (this.settings.syncOnStartup) {
       setTimeout(() => this.runSync(), 3000);
     }
@@ -303,58 +309,155 @@ export default class GranolaAdoraPlugin extends Plugin {
     }
 
     try {
-      const raw = await this.app.vault.read(activeFile);
-      const parsed = JSON.parse(raw) as Partial<TeamConfigTemplate>;
-      const apply = <K extends keyof TeamConfigTemplate>(key: K): void => {
-        if (parsed[key] !== undefined) {
-          (this.settings[key as keyof GranolaAdoraSettings] as unknown) =
-            parsed[key];
-        }
-      };
-
-      apply("syncIntervalMinutes");
-      apply("syncOnStartup");
-      apply("baseFolderPath");
-      apply("meetingsFolderName");
-      apply("ideasFolderName");
-      apply("customersFolderName");
-      apply("peopleFolderName");
-      apply("prioritiesFolderName");
-      apply("includeTranscript");
-      apply("autoTagEnabled");
-      apply("knownCustomers");
-      apply("knownTopics");
-      apply("syncSharedDocs");
-      apply("syncWorkspaceLists");
-      apply("syncLinear");
-      apply("linearFolderName");
-      apply("syncFigma");
-      apply("designsFolderName");
-      apply("aiEnabled");
-      apply("aiModel");
-      apply("aiModelFast");
-      apply("aiModelDeep");
-      apply("digestsFolderName");
-      apply("syncSlack");
-      apply("slackFolderName");
-      apply("syncGithub");
-      apply("githubOrg");
-      apply("githubFolderName");
-      apply("syncGoogleDrive");
-      apply("googleDriveFolderId");
-      apply("googleDriveFolderName");
-      apply("healthScoreEnabled");
-      apply("decisionsFolderName");
-      apply("releaseNotesFolderName");
-
-      this.updateTaggerConfig();
-      this.restartAutoSync();
-      await this.savePluginSettings();
+      await this.importTeamConfigFromFile(activeFile);
       new Notice("Team config imported. Add your API keys/tokens in settings.");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
       new Notice(`Failed to import team config: ${message}`);
     }
+  }
+
+  async runTeamOneStepSetup(): Promise<void> {
+    const defaultPath = normalizePath(
+      `${this.settings.baseFolderPath}/_setup/team-config.template.json`,
+    );
+    const defaultConfig = this.app.vault.getAbstractFileByPath(defaultPath);
+    const activeFile = this.app.workspace.getActiveFile();
+
+    let configFile: TFile | null = null;
+    if (defaultConfig instanceof TFile) {
+      configFile = defaultConfig;
+    } else if (activeFile && activeFile.path.endsWith(".json")) {
+      configFile = activeFile;
+    }
+
+    if (!configFile) {
+      new Notice(
+        `No team config found. Add ${defaultPath} or open a config JSON file first.`,
+      );
+      return;
+    }
+
+    new Notice("Running team one-step setup...");
+
+    try {
+      await this.importTeamConfigFromFile(configFile);
+
+      const missing = this.getMissingIntegrationRequirements();
+      if (missing.length > 0) {
+        new Notice(
+          `Setup imported, but some integrations are missing credentials: ${missing.join(", ")}`,
+          10000,
+        );
+      }
+
+      this.settings.lastSyncTimestamp = null;
+      this.settings.syncedDocIds = [];
+      await this.savePluginSettings();
+
+      await this.runSync();
+      await this.runLinking();
+      new Notice("Team one-step setup complete.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      new Notice(`Team setup failed: ${message}`);
+    }
+  }
+
+  private getMissingIntegrationRequirements(): string[] {
+    const missing: string[] = [];
+
+    if (this.settings.syncLinear && !this.settings.linearApiKey) {
+      missing.push("Linear API key");
+    }
+    if (this.settings.syncFigma) {
+      if (!this.settings.figmaAccessToken) {
+        missing.push("Figma access token");
+      }
+      if (!this.settings.figmaTeamId) {
+        missing.push("Figma team ID");
+      }
+    }
+    if (this.settings.syncSlack && !this.settings.slackBotToken) {
+      missing.push("Slack bot token");
+    }
+    if (this.settings.syncGithub) {
+      if (!this.settings.githubToken) {
+        missing.push("GitHub token");
+      }
+      if (!this.settings.githubOrg) {
+        missing.push("GitHub org");
+      }
+    }
+    if (this.settings.syncGoogleDrive) {
+      if (!this.settings.googleDriveFolderId) {
+        missing.push("Google Drive folder ID");
+      }
+      const hasAccessToken = Boolean(this.settings.googleDriveAccessToken);
+      const hasRefreshFlow = Boolean(
+        this.settings.googleDriveClientId &&
+          this.settings.googleDriveClientSecret &&
+          this.settings.googleDriveRefreshToken,
+      );
+      if (!hasAccessToken && !hasRefreshFlow) {
+        missing.push("Google Drive OAuth credentials");
+      }
+    }
+    if (this.settings.aiEnabled && !this.settings.claudeApiKey) {
+      missing.push("Claude API key");
+    }
+
+    return missing;
+  }
+
+  private async importTeamConfigFromFile(file: TFile): Promise<void> {
+    const raw = await this.app.vault.read(file);
+    const parsed = JSON.parse(raw) as Partial<TeamConfigTemplate>;
+    const apply = <K extends keyof TeamConfigTemplate>(key: K): void => {
+      if (parsed[key] !== undefined) {
+        (this.settings[key as keyof GranolaAdoraSettings] as unknown) =
+          parsed[key];
+      }
+    };
+
+    apply("syncIntervalMinutes");
+    apply("syncOnStartup");
+    apply("baseFolderPath");
+    apply("meetingsFolderName");
+    apply("ideasFolderName");
+    apply("customersFolderName");
+    apply("peopleFolderName");
+    apply("prioritiesFolderName");
+    apply("includeTranscript");
+    apply("autoTagEnabled");
+    apply("knownCustomers");
+    apply("knownTopics");
+    apply("syncSharedDocs");
+    apply("syncWorkspaceLists");
+    apply("syncLinear");
+    apply("linearFolderName");
+    apply("syncFigma");
+    apply("designsFolderName");
+    apply("aiEnabled");
+    apply("aiModel");
+    apply("aiModelFast");
+    apply("aiModelDeep");
+    apply("digestsFolderName");
+    apply("syncSlack");
+    apply("slackFolderName");
+    apply("syncGithub");
+    apply("githubOrg");
+    apply("githubFolderName");
+    apply("syncGoogleDrive");
+    apply("googleDriveFolderId");
+    apply("googleDriveFolderName");
+    apply("healthScoreEnabled");
+    apply("decisionsFolderName");
+    apply("releaseNotesFolderName");
+
+    this.updateTaggerConfig();
+    this.restartAutoSync();
+    await this.savePluginSettings();
   }
 
   async checkAuth(): Promise<boolean> {

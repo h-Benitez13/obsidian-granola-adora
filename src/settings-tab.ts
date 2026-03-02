@@ -846,5 +846,23 @@ export class GranolaAdoraSettingTab extends PluginSettingTab {
           }
         }),
       );
+
+    new Setting(containerEl)
+      .setName("One-step team setup")
+      .setDesc(
+        "Imports team config, resets sync state, runs full sync, then re-links notes.",
+      )
+      .addButton((btn) =>
+        btn.setButtonText("Run setup").setCta().onClick(async () => {
+          btn.setButtonText("Running...");
+          btn.setDisabled(true);
+          try {
+            await this.plugin.runTeamOneStepSetup();
+          } finally {
+            btn.setButtonText("Run setup");
+            btn.setDisabled(false);
+          }
+        }),
+      );
   }
 }

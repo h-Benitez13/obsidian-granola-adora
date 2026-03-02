@@ -29,6 +29,20 @@ Obsidian plugin that syncs company context into a local vault and turns it into 
 4. New teammates open that JSON file and run `Import team config from active file`.
 5. Each teammate adds their own API keys/tokens.
 
+### One-step onboarding command
+
+Use command palette:
+
+- `Team one-step setup (import + full sync)`
+
+What it does:
+
+1. Loads team config from `Adora/_setup/team-config.template.json` (or active JSON file).
+2. Imports shared non-sensitive settings.
+3. Resets sync state.
+4. Runs full sync.
+5. Runs cross-linking pass.
+
 ## Docs
 
 - MCP setup and central-brain workflow: `docs/mcp-setup.md`
