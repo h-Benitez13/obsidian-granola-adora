@@ -113,6 +113,51 @@ export interface WorkspaceMembersResponse {
   invites: unknown[];
 }
 
+// ── Linear types ──
+
+export interface LinearIssue {
+  id: string;
+  identifier: string;
+  title: string;
+  description: string | null;
+  state: { name: string; type: string; color: string };
+  priority: number;
+  priorityLabel: string;
+  assignee: { name: string; email: string } | null;
+  project: { name: string } | null;
+  labels: { nodes: { name: string; color: string }[] };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LinearProject {
+  id: string;
+  name: string;
+  description: string | null;
+  state: string;
+  icon: string | null;
+  color: string | null;
+  progress: number;
+  lead: { name: string; email: string } | null;
+  startDate: string | null;
+  targetDate: string | null;
+}
+
+// ── Figma types ──
+
+export interface FigmaFile {
+  key: string;
+  name: string;
+  thumbnail_url: string;
+  last_modified: string;
+  project_name: string;
+}
+
+export interface FigmaProject {
+  id: number;
+  name: string;
+}
+
 // ── Plugin settings ──
 
 export interface GranolaAdoraSettings {
@@ -134,6 +179,13 @@ export interface GranolaAdoraSettings {
   syncSharedDocs: boolean;
   /** Sync workspace folders (document lists) visible to you. */
   syncWorkspaceLists: boolean;
+  linearApiKey: string;
+  syncLinear: boolean;
+  linearFolderName: string;
+  figmaAccessToken: string;
+  figmaTeamId: string;
+  syncFigma: boolean;
+  designsFolderName: string;
 }
 
 export const DEFAULT_SETTINGS: GranolaAdoraSettings = {
@@ -166,6 +218,13 @@ export const DEFAULT_SETTINGS: GranolaAdoraSettings = {
   syncedDocIds: [],
   syncSharedDocs: true,
   syncWorkspaceLists: true,
+  linearApiKey: "",
+  syncLinear: false,
+  linearFolderName: "Linear",
+  figmaAccessToken: "",
+  figmaTeamId: "",
+  syncFigma: false,
+  designsFolderName: "Designs",
 };
 
 export interface SyncResult {

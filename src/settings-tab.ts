@@ -1,5 +1,7 @@
 import { App, Notice, PluginSettingTab, Setting } from "obsidian";
 import type GranolaAdoraPlugin from "./main";
+import { FigmaClient } from "./figma";
+import { LinearClient } from "./linear";
 
 export class GranolaAdoraSettingTab extends PluginSettingTab {
   plugin: GranolaAdoraPlugin;
@@ -103,6 +105,166 @@ export class GranolaAdoraSettingTab extends PluginSettingTab {
             await this.plugin.savePluginSettings();
           }),
       );
+
+    containerEl.createEl("h3", { text: "Linear" });
+
+    new Setting(containerEl)
+      .setName("Sync from Linear")
+      .setDesc("Import issues and projects from Linear into your vault.")
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.syncLinear)
+          .onChange(async (value) => {
+            this.plugin.settings.syncLinear = value;
+            await this.plugin.savePluginSettings();
+          }),
+      );
+
+    new Setting(containerEl)
+      .setName("Linear API key")
+      .setDesc("Personal API key from Linear Settings → API.")
+      .addText((text) =>
+        text
+          .setPlaceholder("lin_api_...")
+          .setValue(this.plugin.settings.linearApiKey)
+          .then((t) => {
+            t.inputEl.type = "password";
+          })
+          .onChange(async (value) => {
+            this.plugin.settings.linearApiKey = value.trim();
+            await this.plugin.savePluginSettings();
+          }),
+      );
+
+    const linearStatusSetting = new Setting(containerEl)
+      .setName("Test connection")
+      .setDesc("Verify your Linear API key works.");
+
+    linearStatusSetting.addButton((btn) =>
+      btn.setButtonText("Test").onClick(async () => {
+        const apiKey = this.plugin.settings.linearApiKey;
+        if (!apiKey) {
+          new Notice("Linear: Enter an API key first.");
+          return;
+        }
+        btn.setButtonText("Testing...");
+        btn.setDisabled(true);
+        try {
+          const client = new LinearClient(apiKey);
+          const ok = await client.testConnection();
+          if (ok) {
+            new Notice("Linear: Connected successfully.");
+            linearStatusSetting.setDesc("Connected ✓");
+          } else {
+            new Notice("Linear: Invalid API key.");
+            linearStatusSetting.setDesc("Connection failed — check your key.");
+          }
+        } catch {
+          new Notice("Linear: Connection failed.");
+          linearStatusSetting.setDesc("Connection failed — check your key.");
+        } finally {
+          btn.setButtonText("Test");
+          btn.setDisabled(false);
+        }
+      }),
+    );
+
+    new Setting(containerEl).setName("Linear folder").addText((text) =>
+      text
+        .setValue(this.plugin.settings.linearFolderName)
+        .onChange(async (value) => {
+          this.plugin.settings.linearFolderName = value.trim() || "Linear";
+          await this.plugin.savePluginSettings();
+        }),
+    );
+
+    containerEl.createEl("h3", { text: "Figma" });
+
+    new Setting(containerEl)
+      .setName("Sync from Figma")
+      .setDesc("Import design files from Figma as linked notes.")
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.syncFigma)
+          .onChange(async (value) => {
+            this.plugin.settings.syncFigma = value;
+            await this.plugin.savePluginSettings();
+          }),
+      );
+
+    new Setting(containerEl)
+      .setName("Figma access token")
+      .setDesc(
+        "Personal access token from Figma Settings → Account → Personal access tokens.",
+      )
+      .addText((text) =>
+        text
+          .setPlaceholder("figd_...")
+          .setValue(this.plugin.settings.figmaAccessToken)
+          .then((t) => {
+            t.inputEl.type = "password";
+            t.inputEl.style.width = "100%";
+          })
+          .onChange(async (value) => {
+            this.plugin.settings.figmaAccessToken = value.trim();
+            await this.plugin.savePluginSettings();
+          }),
+      );
+
+    new Setting(containerEl)
+      .setName("Figma team ID")
+      .setDesc("Your Figma team ID (found in the team URL).")
+      .addText((text) =>
+        text
+          .setPlaceholder("123456789")
+          .setValue(this.plugin.settings.figmaTeamId)
+          .onChange(async (value) => {
+            this.plugin.settings.figmaTeamId = value.trim();
+            await this.plugin.savePluginSettings();
+          }),
+      );
+
+    const figmaStatusSetting = new Setting(containerEl)
+      .setName("Test Figma connection")
+      .setDesc("Verify your access token is valid.");
+
+    figmaStatusSetting.addButton((btn) =>
+      btn.setButtonText("Test").onClick(async () => {
+        const token = this.plugin.settings.figmaAccessToken;
+        if (!token) {
+          new Notice("Figma: Enter an access token first.");
+          return;
+        }
+        btn.setButtonText("Testing...");
+        btn.setDisabled(true);
+        try {
+          const client = new FigmaClient(token);
+          const ok = await client.testConnection();
+          if (ok) {
+            new Notice("Figma: Connection successful!");
+            figmaStatusSetting.setDesc("Connected ✓");
+          } else {
+            new Notice("Figma: Connection failed. Check your access token.");
+            figmaStatusSetting.setDesc("Connection failed — check your token.");
+          }
+        } catch {
+          new Notice("Figma: Connection failed.");
+          figmaStatusSetting.setDesc("Connection failed — check your token.");
+        } finally {
+          btn.setButtonText("Test");
+          btn.setDisabled(false);
+        }
+      }),
+    );
+
+    new Setting(containerEl).setName("Designs folder").addText((text) =>
+      text
+        .setValue(this.plugin.settings.designsFolderName)
+        .onChange(async (value) => {
+          this.plugin.settings.designsFolderName = value.trim() || "Designs";
+          await this.plugin.savePluginSettings();
+        }),
+    );
 
     containerEl.createEl("h3", { text: "Folders" });
 
