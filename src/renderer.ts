@@ -11,6 +11,7 @@ export function renderMeetingNote(
   doc: GranolaDocument,
   tags: ExtractedTags,
   includeTranscript: boolean,
+  customersFolderPath?: string,
 ): string {
   const parts: string[] = [];
 
@@ -24,7 +25,7 @@ export function renderMeetingNote(
   }
 
   if (tags.customers.length > 0 || tags.topics.length > 0) {
-    parts.push(renderTagsSection(tags));
+    parts.push(renderTagsSection(tags, customersFolderPath));
   }
 
   if (includeTranscript && doc.transcript && doc.transcript.length > 0) {
@@ -167,13 +168,17 @@ function renderActionItems(actionItems: string[]): string {
   return lines.join("\n");
 }
 
-function renderTagsSection(tags: ExtractedTags): string {
+function renderTagsSection(
+  tags: ExtractedTags,
+  customersFolderPath?: string,
+): string {
   const lines: string[] = [HORIZONTAL_RULE, "## Related\n"];
 
   if (tags.customers.length > 0) {
+    const folder = customersFolderPath ?? "Customers";
     lines.push(
       "**Customers:** " +
-        tags.customers.map((c) => `[[Customers/${c}|${c}]]`).join(", "),
+        tags.customers.map((c) => `[[${folder}/${c}|${c}]]`).join(", "),
     );
   }
 
@@ -242,7 +247,12 @@ export function renderIdeaNote(
   return [...fm, ...body].join("\n");
 }
 
-export function renderCustomerNote(customerName: string): string {
+export function renderCustomerNote(
+  customerName: string,
+  meetingsFolderPath?: string,
+): string {
+  const meetingsPath = meetingsFolderPath ?? "Adora/Meetings";
+
   const fm = [
     "---",
     `title: "${escapeYaml(customerName)}"`,
@@ -261,7 +271,7 @@ export function renderCustomerNote(customerName: string): string {
     "## Meeting History\n",
     "```dataview",
     `TABLE date as "Date", title as "Meeting"`,
-    `FROM "Adora/Meetings"`,
+    `FROM "${meetingsPath}"`,
     `WHERE contains(customers, "${escapeYaml(customerName)}")`,
     `SORT date DESC`,
     "```",

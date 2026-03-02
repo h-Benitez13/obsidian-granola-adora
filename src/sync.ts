@@ -70,8 +70,12 @@ export class SyncEngine {
       updated: 0,
       skipped: 0,
       errors: [],
+      linearIssues: 0,
+      linearProjects: 0,
+      figmaFiles: 0,
       slackMessages: 0,
       githubPRs: 0,
+      googleDriveDocs: 0,
       hubspotContacts: 0,
       hubspotCompanies: 0,
       hubspotDeals: 0,
@@ -87,10 +91,6 @@ export class SyncEngine {
       ? allDocs.filter((d) => d.updated_at > settings.lastSyncTimestamp!)
       : allDocs;
 
-    if (docs.length === 0) {
-      return result;
-    }
-
     for (const doc of docs) {
       try {
         if (settings.includeTranscript) {
@@ -102,10 +102,12 @@ export class SyncEngine {
         }
 
         const tags = this.tagger.extract(doc);
+        const customersFolderPath = `${settings.baseFolderPath}/${settings.customersFolderName}`;
         const markdown = renderMeetingNote(
           doc,
           tags,
           settings.includeTranscript,
+          customersFolderPath,
         );
         const filePath = this.buildMeetingFilePath(doc, settings);
         const existingFile = this.app.vault.getAbstractFileByPath(filePath);
@@ -161,14 +163,17 @@ export class SyncEngine {
 
     if (settings.syncLinear && settings.linearApiKey) {
       try {
-        await this.withTimeout(
+        const linearStats = await this.withTimeout(
           (async () => {
-            await this.syncLinearIssues();
-            await this.syncLinearProjects();
+            const issues = await this.syncLinearIssues();
+            const projects = await this.syncLinearProjects();
+            return { issues, projects };
           })(),
           30000,
           "Linear",
         );
+        result.linearIssues = linearStats.issues;
+        result.linearProjects = linearStats.projects;
       } catch (err) {
         const message = err instanceof Error ? err.message : "Unknown error";
         result.errors.push(`Linear sync failed: ${message}`);
@@ -181,7 +186,7 @@ export class SyncEngine {
       settings.figmaTeamId
     ) {
       try {
-        await this.withTimeout(this.syncFigmaFiles(), 30000, "Figma");
+        result.figmaFiles = await this.withTimeout(this.syncFigmaFiles(), 30000, "Figma");
       } catch (err) {
         const message = err instanceof Error ? err.message : "Unknown error";
         result.errors.push(`Figma sync failed: ${message}`);
@@ -193,7 +198,7 @@ export class SyncEngine {
         const slackClient = new SlackClient(settings.slackBotToken);
         result.slackMessages = await this.withTimeout(
           this.syncSlackMessages(slackClient),
-          30000,
+          60000,
           "Slack",
         );
       } catch (err) {
@@ -228,7 +233,7 @@ export class SyncEngine {
           settings.googleDriveRefreshToken,
           settings.googleDriveAccessToken,
         );
-        await this.withTimeout(
+        result.googleDriveDocs = await this.withTimeout(
           this.syncGoogleDriveDocs(driveClient),
           30000,
           "GoogleDrive",
@@ -268,13 +273,14 @@ export class SyncEngine {
     return result;
   }
 
-  private async syncLinearIssues(): Promise<void> {
+  private async syncLinearIssues(): Promise<number> {
     const settings = this.getSettings();
     const client = new LinearClient(settings.linearApiKey);
     const issues = await client.fetchMyIssues();
     const basePath = `${settings.baseFolderPath}/${settings.linearFolderName}/Issues`;
     const meetingsPath = `${settings.baseFolderPath}/${settings.meetingsFolderName}`;
 
+    let count = 0;
     for (const issue of issues) {
       const fileName = sanitizeFileName(`${issue.identifier} ${issue.title}`);
       const filePath = normalizePath(`${basePath}/${fileName}.md`);
@@ -290,16 +296,19 @@ export class SyncEngine {
       } else {
         await this.app.vault.create(filePath, content);
       }
+      count++;
     }
+    return count;
   }
 
-  private async syncLinearProjects(): Promise<void> {
+  private async syncLinearProjects(): Promise<number> {
     const settings = this.getSettings();
     const client = new LinearClient(settings.linearApiKey);
     const projects = await client.fetchProjects();
     const basePath = `${settings.baseFolderPath}/${settings.linearFolderName}/Projects`;
     const issuesPath = `${settings.baseFolderPath}/${settings.linearFolderName}/Issues`;
 
+    let count = 0;
     for (const project of projects) {
       const fileName = sanitizeFileName(project.name);
       const filePath = normalizePath(`${basePath}/${fileName}.md`);
@@ -311,7 +320,9 @@ export class SyncEngine {
       } else {
         await this.app.vault.create(filePath, content);
       }
+      count++;
     }
+    return count;
   }
 
   private renderLinearIssueNote(
@@ -432,7 +443,7 @@ export class SyncEngine {
     return [...fm, ...body].join("\n");
   }
 
-  private async syncFigmaFiles(): Promise<void> {
+  private async syncFigmaFiles(): Promise<number> {
     const settings = this.getSettings();
     const client = new FigmaClient(settings.figmaAccessToken);
     const projects = await client.fetchTeamProjects(settings.figmaTeamId);
@@ -455,6 +466,7 @@ export class SyncEngine {
     const designsFolder = `${basePath}/${settings.designsFolderName}`;
     await this.ensureFolder(designsFolder);
 
+    let count = 0;
     for (const file of allFiles) {
       const projectFolder = `${designsFolder}/${sanitizeFileName(file.project_name || "Uncategorized")}`;
       await this.ensureFolder(projectFolder);
@@ -478,7 +490,9 @@ export class SyncEngine {
           this.renderFigmaNote(file, basePath),
         );
       }
+      count++;
     }
+    return count;
   }
 
   private renderFigmaNote(file: FigmaFile, basePath: string): string {
@@ -556,6 +570,8 @@ export class SyncEngine {
 
     let count = 0;
 
+    const slackErrors: string[] = [];
+
     for (const channel of channels) {
       try {
         const pins = await client.fetchPins(channel.id);
@@ -568,13 +584,15 @@ export class SyncEngine {
             slackFolder,
           );
           if (this.app.vault.getAbstractFileByPath(filePath)) continue;
+          if (msg.user) msg.userName = await client.resolveUserName(msg.user);
           const content = this.renderSlackNote(msg, "pin");
           await this.app.vault.create(filePath, content);
           if (msg.permalink) existingPermalinks.add(msg.permalink);
           count++;
         }
-      } catch {
-        /* channel may lack pin permissions */
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Unknown error";
+        slackErrors.push(`Pins failed for #${channel.name}: ${msg}`);
       }
 
       try {
@@ -606,7 +624,7 @@ export class SyncEngine {
           count++;
         }
       } catch {
-        /* channel may lack bookmark permissions */
+        // bookmarks.list is not available on all Slack plans; skip silently
       }
 
       await new Promise((r) => setTimeout(r, 250));
@@ -623,13 +641,19 @@ export class SyncEngine {
           slackFolder,
         );
         if (this.app.vault.getAbstractFileByPath(filePath)) continue;
+        if (msg.user) msg.userName = await client.resolveUserName(msg.user);
         const content = this.renderSlackNote(msg, "reaction");
         await this.app.vault.create(filePath, content);
         if (msg.permalink) existingPermalinks.add(msg.permalink);
         count++;
       }
-    } catch {
-      /* reactions.list may not be available */
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      slackErrors.push(`Reacted messages failed: ${msg}`);
+    }
+
+    if (slackErrors.length > 0) {
+      throw new Error(slackErrors.join("; "));
     }
 
     return count;
@@ -785,13 +809,14 @@ export class SyncEngine {
     return [...fm, ...body].join("\n");
   }
 
-  private async syncGoogleDriveDocs(client: GoogleDriveClient): Promise<void> {
+  private async syncGoogleDriveDocs(client: GoogleDriveClient): Promise<number> {
     const settings = this.getSettings();
     const folderPath = `${settings.baseFolderPath}/${settings.googleDriveFolderName}`;
     await this.ensureFolder(folderPath);
 
     const docs = await client.fetchGoogleDocsInFolder(settings.googleDriveFolderId, 100);
 
+    let count = 0;
     for (const doc of docs) {
       const fileName = sanitizeFileName(doc.name);
       const filePath = normalizePath(`${folderPath}/${fileName}.md`);
@@ -814,7 +839,9 @@ export class SyncEngine {
       } else {
         await this.app.vault.create(filePath, content);
       }
+      count++;
     }
+    return count;
   }
 
   private renderGoogleDriveNote(doc: GoogleDriveFile, plainText: string): string {
@@ -1718,7 +1745,8 @@ export class SyncEngine {
         `${settings.baseFolderPath}/${settings.customersFolderName}/${fileName}.md`,
       );
       if (!this.app.vault.getAbstractFileByPath(filePath)) {
-        await this.app.vault.create(filePath, renderCustomerNote(customer));
+        const meetingsPath = `${settings.baseFolderPath}/${settings.meetingsFolderName}`;
+        await this.app.vault.create(filePath, renderCustomerNote(customer, meetingsPath));
       }
     }
   }
@@ -1772,6 +1800,12 @@ export function formatSyncResult(result: SyncResult): string {
   if (result.created > 0) parts.push(`${result.created} new`);
   if (result.updated > 0) parts.push(`${result.updated} updated`);
   if (result.skipped > 0) parts.push(`${result.skipped} unchanged`);
+  if (result.linearIssues > 0) parts.push(`${result.linearIssues} Linear issues`);
+  if (result.linearProjects > 0) parts.push(`${result.linearProjects} Linear projects`);
+  if (result.figmaFiles > 0) parts.push(`${result.figmaFiles} Figma files`);
+  if (result.slackMessages > 0) parts.push(`${result.slackMessages} Slack messages`);
+  if (result.githubPRs > 0) parts.push(`${result.githubPRs} GitHub PRs`);
+  if (result.googleDriveDocs > 0) parts.push(`${result.googleDriveDocs} Google Drive docs`);
   if (result.hubspotContacts > 0) parts.push(`${result.hubspotContacts} HubSpot contacts`);
   if (result.hubspotCompanies > 0) parts.push(`${result.hubspotCompanies} HubSpot companies`);
   if (result.hubspotDeals > 0) parts.push(`${result.hubspotDeals} HubSpot deals`);

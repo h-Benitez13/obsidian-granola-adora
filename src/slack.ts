@@ -100,13 +100,46 @@ export interface SlackBookmark {
   created: number;
 }
 
+interface SlackUserInfoResponse extends SlackApiResponse {
+  user: {
+    id: string;
+    name: string;
+    real_name?: string;
+    profile?: { display_name?: string; real_name?: string };
+  };
+}
+
 // ── Client ──
 
 export class SlackClient {
   private token: string;
+  private userNameCache = new Map<string, string>();
 
   constructor(token: string) {
     this.token = token;
+  }
+
+  async resolveUserName(userId: string): Promise<string> {
+    if (!userId) return "";
+    const cached = this.userNameCache.get(userId);
+    if (cached !== undefined) return cached;
+
+    try {
+      const data = await this.get<SlackUserInfoResponse>("users.info", {
+        user: userId,
+      });
+      const name =
+        data.user.profile?.display_name ||
+        data.user.profile?.real_name ||
+        data.user.real_name ||
+        data.user.name ||
+        userId;
+      this.userNameCache.set(userId, name);
+      return name;
+    } catch {
+      this.userNameCache.set(userId, userId);
+      return userId;
+    }
   }
 
   async testConnection(): Promise<boolean> {

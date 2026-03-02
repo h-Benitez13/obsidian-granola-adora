@@ -481,8 +481,12 @@ export interface SyncResult {
   updated: number;
   skipped: number;
   errors: string[];
+  linearIssues: number;
+  linearProjects: number;
+  figmaFiles: number;
   slackMessages: number;
   githubPRs: number;
+  googleDriveDocs: number;
   hubspotContacts: number;
   hubspotCompanies: number;
   hubspotDeals: number;

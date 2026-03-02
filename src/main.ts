@@ -764,9 +764,10 @@ export default class GranolaAdoraPlugin extends Plugin {
     title: string,
     aiType: string,
     aiOutput: string,
+    sourceMeetingPaths?: string[],
   ): Promise<void> {
     const now = new Date().toISOString();
-    const content = [
+    const fmLines = [
       "---",
       `title: "${title.replace(/"/g, '\\"')}"`,
       `type: "${aiType}"`,
@@ -774,12 +775,35 @@ export default class GranolaAdoraPlugin extends Plugin {
       `tags:`,
       `  - "ai"`,
       `  - "${aiType}"`,
-      "---",
+    ];
+    if (sourceMeetingPaths && sourceMeetingPaths.length > 0) {
+      fmLines.push("source_meetings:");
+      for (const p of sourceMeetingPaths) {
+        fmLines.push(`  - "${p.replace(/"/g, '\\"')}"`);
+      }
+    }
+    fmLines.push("---");
+
+    const bodyLines = [
       "",
       `# ${title}`,
       "",
       `> Generated on ${new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}`,
       "",
+    ];
+
+    if (sourceMeetingPaths && sourceMeetingPaths.length > 0) {
+      bodyLines.push("## Source Meetings\n");
+      for (const p of sourceMeetingPaths) {
+        const notePath = p.replace(/\.md$/, "");
+        bodyLines.push(`- [[${notePath}]]`);
+      }
+      bodyLines.push("");
+    }
+
+    const content = [
+      ...fmLines,
+      ...bodyLines,
       aiOutput,
       "",
     ].join("\n");
@@ -841,6 +865,7 @@ export default class GranolaAdoraPlugin extends Plugin {
             summaries.push(await this.getMeetingSummary(file));
           }
 
+          const sourcePaths = matching.slice(0, 10).map((f) => f.path);
           const result = await ai.generateCustomerPrepBrief(
             customerName,
             summaries,
@@ -857,6 +882,7 @@ export default class GranolaAdoraPlugin extends Plugin {
             `${customerName} — Prep Brief`,
             "prep-brief",
             result,
+            sourcePaths,
           );
           new Notice(`Prep brief generated for ${customerName}`);
         } catch (err) {
@@ -991,6 +1017,7 @@ export default class GranolaAdoraPlugin extends Plugin {
         }
       }
 
+      const digestSourcePaths = recentFiles.slice(0, 15).map((f) => f.path);
       const result = await ai.generateWeeklyDigest(
         summaries,
         issuesSummary,
@@ -1009,6 +1036,7 @@ export default class GranolaAdoraPlugin extends Plugin {
         `Weekly Digest — ${dateStr}`,
         "weekly-digest",
         result,
+        digestSourcePaths,
       );
       new Notice("Weekly digest generated!");
     } catch (err) {
@@ -1042,6 +1070,7 @@ export default class GranolaAdoraPlugin extends Plugin {
         summaries.push(await this.getMeetingSummary(file));
       }
 
+      const themeSourcePaths = recentFiles.slice(0, 20).map((f) => f.path);
       const result = await ai.detectThemes(summaries);
       const dateStr = new Date().toISOString().split("T")[0];
       const filePath = normalizePath(
@@ -1053,6 +1082,7 @@ export default class GranolaAdoraPlugin extends Plugin {
         `Theme Analysis — ${dateStr}`,
         "theme-analysis",
         result,
+        themeSourcePaths,
       );
       new Notice("Theme analysis generated!");
     } catch (err) {
@@ -1104,6 +1134,7 @@ export default class GranolaAdoraPlugin extends Plugin {
         summaries.push(await this.getMeetingSummary(file));
       }
 
+      const asksSourcePaths = relevantFiles.slice(0, 40).map((f) => f.path);
       const result = await ai.extractTopCustomerAsks(summaries);
       const dateStr = new Date().toISOString().split("T")[0];
       const filePath = normalizePath(
@@ -1115,6 +1146,7 @@ export default class GranolaAdoraPlugin extends Plugin {
         `Top Customer Asks — ${dateStr}`,
         "customer-asks",
         result,
+        asksSourcePaths,
       );
       new Notice("Top customer asks report generated!");
     } catch (err) {
@@ -1143,7 +1175,7 @@ export default class GranolaAdoraPlugin extends Plugin {
         `${this.settings.baseFolderPath}/${this.settings.ideasFolderName}/${safeName}.md`,
       );
 
-      await this.writeAINote(filePath, title, "extracted-ideas", result);
+      await this.writeAINote(filePath, title, "extracted-ideas", result, [activeFile.path]);
       new Notice("Ideas extracted!");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
