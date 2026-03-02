@@ -136,7 +136,7 @@ export class LinearClient {
         }
         first: $first
         after: $after
-        orderBy: completedAt
+        orderBy: updatedAt
       ) {
         nodes { ${ISSUE_FIELDS} }
         pageInfo { hasNextPage endCursor }
