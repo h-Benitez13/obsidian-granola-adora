@@ -3,6 +3,7 @@ import { GranolaApiClient } from "./api";
 import { FigmaClient } from "./figma";
 import { LinearClient } from "./linear";
 import { GitHubClient } from "./github";
+import { GoogleDriveClient } from "./gdrive";
 import { SlackClient } from "./slack";
 import { AutoTagger } from "./tagger";
 import {
@@ -19,6 +20,7 @@ import {
 import { AICortex } from "./ai";
 import {
   FigmaFile,
+  GoogleDriveFile,
   GitHubPR,
   GranolaAdoraSettings,
   GranolaDocument,
@@ -200,6 +202,33 @@ export class SyncEngine {
       } catch (err) {
         const message = err instanceof Error ? err.message : "Unknown error";
         result.errors.push(`GitHub sync failed: ${message}`);
+      }
+    }
+
+    if (
+      settings.syncGoogleDrive &&
+      settings.googleDriveFolderId &&
+      (settings.googleDriveAccessToken || settings.googleDriveRefreshToken)
+    ) {
+      try {
+        const driveClient = new GoogleDriveClient(
+          settings.googleDriveClientId,
+          settings.googleDriveClientSecret,
+          settings.googleDriveRefreshToken,
+          settings.googleDriveAccessToken,
+        );
+        await this.withTimeout(
+          this.syncGoogleDriveDocs(driveClient),
+          30000,
+          "GoogleDrive",
+        );
+        const nextAccessToken = driveClient.getAccessToken();
+        if (nextAccessToken && nextAccessToken !== settings.googleDriveAccessToken) {
+          settings.googleDriveAccessToken = nextAccessToken;
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unknown error";
+        result.errors.push(`Google Drive sync failed: ${message}`);
       }
     }
 
@@ -726,6 +755,68 @@ export class SyncEngine {
     return [...fm, ...body].join("\n");
   }
 
+  private async syncGoogleDriveDocs(client: GoogleDriveClient): Promise<void> {
+    const settings = this.getSettings();
+    const folderPath = `${settings.baseFolderPath}/${settings.googleDriveFolderName}`;
+    await this.ensureFolder(folderPath);
+
+    const docs = await client.fetchGoogleDocsInFolder(settings.googleDriveFolderId, 100);
+
+    for (const doc of docs) {
+      const fileName = sanitizeFileName(doc.name);
+      const filePath = normalizePath(`${folderPath}/${fileName}.md`);
+      const existingFile = this.app.vault.getAbstractFileByPath(filePath);
+
+      if (existingFile instanceof TFile) {
+        const existingContent = await this.app.vault.read(existingFile);
+        const existingUpdated =
+          this.extractFrontmatterField(existingContent, "updated") ?? "";
+        if (existingUpdated >= doc.modifiedTime) {
+          continue;
+        }
+      }
+
+      const plainText = await client.exportAsPlainText(doc.id);
+      const content = this.renderGoogleDriveNote(doc, plainText);
+
+      if (existingFile instanceof TFile) {
+        await this.app.vault.modify(existingFile, content);
+      } else {
+        await this.app.vault.create(filePath, content);
+      }
+    }
+  }
+
+  private renderGoogleDriveNote(doc: GoogleDriveFile, plainText: string): string {
+    const fm = [
+      "---",
+      `type: "google-doc"`,
+      `google_drive_id: "${escapeYaml(doc.id)}"`,
+      `title: "${escapeYaml(doc.name)}"`,
+      `updated: "${doc.modifiedTime}"`,
+      `url: "${escapeYaml(doc.webViewLink)}"`,
+      `tags:`,
+      `  - "google-drive"`,
+      `  - "google-doc"`,
+      `synced: "${new Date().toISOString()}"`,
+      "---",
+    ];
+
+    const body = [
+      "",
+      `# ${doc.name}`,
+      "",
+      `[Open in Google Docs](${doc.webViewLink})`,
+      "",
+      "## Content",
+      "",
+      plainText.trim() || "_No content available from export._",
+      "",
+    ];
+
+    return [...fm, ...body].join("\n");
+  }
+
   private async syncCustomer360Pages(
     allDocs: GranolaDocument[],
   ): Promise<void> {
@@ -976,6 +1067,12 @@ export class SyncEngine {
 
     if (settings.syncGithub) {
       folders.push(`${settings.baseFolderPath}/${settings.githubFolderName}`);
+    }
+
+    if (settings.syncGoogleDrive) {
+      folders.push(
+        `${settings.baseFolderPath}/${settings.googleDriveFolderName}`,
+      );
     }
 
     folders.push(`${settings.baseFolderPath}/${settings.decisionsFolderName}`);

@@ -93,6 +93,18 @@ export class AICortex {
     );
   }
 
+  async extractTopCustomerAsks(meetingSummaries: string[]): Promise<string> {
+    const truncated = meetingSummaries
+      .slice(0, 40)
+      .map((s) => this.truncate(s, 1500))
+      .join("\n\n---\n\n");
+
+    return this.callClaudeDeep(
+      "You are a product intelligence analyst for Adora AI. Synthesize sales and customer success conversations into a ranked customer ask report. Output clean markdown.",
+      `Meeting notes from the last 30 days:\n\n${truncated}\n\nGenerate a report titled "Top 10 Customer Asks" with these sections:\n## Top 10 Customer Asks\nA numbered list from most frequent to least frequent.\nFor each ask include:\n- Ask summary (one line)\n- Mention frequency estimate (number of meetings/customers)\n- Customers who mentioned it (if known)\n- Why it matters (business impact)\n- One representative quote or evidence line from notes\n\n## Segment Notes\nHighlight any differences between sales and customer success asks.\n\n## Recommended Next Actions\n3-5 concrete product follow-ups for the team.\n\nKeep it concise and practical.`,
+    );
+  }
+
   async analyzeSentiment(meetingExcerpts: string[]): Promise<number> {
     const truncated = meetingExcerpts
       .slice(0, 5)

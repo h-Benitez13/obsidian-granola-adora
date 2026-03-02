@@ -7,7 +7,12 @@ import {
   normalizePath,
   TFile,
 } from "obsidian";
-import { GranolaAdoraSettings, DEFAULT_SETTINGS, Decision } from "./types";
+import {
+  GranolaAdoraSettings,
+  DEFAULT_SETTINGS,
+  Decision,
+  TeamConfigTemplate,
+} from "./types";
 import { GranolaApiClient } from "./api";
 import { AutoTagger } from "./tagger";
 import { SyncEngine, formatSyncResult } from "./sync";
@@ -87,6 +92,12 @@ export default class GranolaAdoraPlugin extends Plugin {
       id: "granola-detect-themes",
       name: "Analyze meeting themes (AI)",
       callback: () => this.generateThemeAnalysis(),
+    });
+
+    this.addCommand({
+      id: "granola-customer-asks",
+      name: "Extract top customer asks (AI)",
+      callback: () => this.generateTopCustomerAsks(),
     });
 
     this.addCommand({
@@ -192,6 +203,18 @@ export default class GranolaAdoraPlugin extends Plugin {
       },
     });
 
+    this.addCommand({
+      id: "granola-export-config",
+      name: "Export team config template",
+      callback: () => this.exportTeamConfigTemplate(),
+    });
+
+    this.addCommand({
+      id: "granola-import-config",
+      name: "Import team config from active file",
+      callback: () => this.importTeamConfigFromActiveFile(),
+    });
+
     if (this.settings.syncOnStartup) {
       setTimeout(() => this.runSync(), 3000);
     }
@@ -210,6 +233,128 @@ export default class GranolaAdoraPlugin extends Plugin {
 
   async savePluginSettings(): Promise<void> {
     await this.saveData(this.settings);
+  }
+
+  async exportTeamConfigTemplate(): Promise<void> {
+    const template: TeamConfigTemplate = {
+      syncIntervalMinutes: this.settings.syncIntervalMinutes,
+      syncOnStartup: this.settings.syncOnStartup,
+      baseFolderPath: this.settings.baseFolderPath,
+      meetingsFolderName: this.settings.meetingsFolderName,
+      ideasFolderName: this.settings.ideasFolderName,
+      customersFolderName: this.settings.customersFolderName,
+      peopleFolderName: this.settings.peopleFolderName,
+      prioritiesFolderName: this.settings.prioritiesFolderName,
+      includeTranscript: this.settings.includeTranscript,
+      autoTagEnabled: this.settings.autoTagEnabled,
+      knownCustomers: [...this.settings.knownCustomers],
+      knownTopics: [...this.settings.knownTopics],
+      syncSharedDocs: this.settings.syncSharedDocs,
+      syncWorkspaceLists: this.settings.syncWorkspaceLists,
+      syncLinear: this.settings.syncLinear,
+      linearFolderName: this.settings.linearFolderName,
+      syncFigma: this.settings.syncFigma,
+      designsFolderName: this.settings.designsFolderName,
+      aiEnabled: this.settings.aiEnabled,
+      aiModel: this.settings.aiModel,
+      aiModelFast: this.settings.aiModelFast,
+      aiModelDeep: this.settings.aiModelDeep,
+      digestsFolderName: this.settings.digestsFolderName,
+      syncSlack: this.settings.syncSlack,
+      slackFolderName: this.settings.slackFolderName,
+      syncGithub: this.settings.syncGithub,
+      githubOrg: this.settings.githubOrg,
+      githubFolderName: this.settings.githubFolderName,
+      syncGoogleDrive: this.settings.syncGoogleDrive,
+      googleDriveFolderId: this.settings.googleDriveFolderId,
+      googleDriveFolderName: this.settings.googleDriveFolderName,
+      healthScoreEnabled: this.settings.healthScoreEnabled,
+      decisionsFolderName: this.settings.decisionsFolderName,
+      releaseNotesFolderName: this.settings.releaseNotesFolderName,
+    };
+
+    const exportPath = normalizePath(
+      `${this.settings.baseFolderPath}/_setup/team-config.template.json`,
+    );
+    const payload = `${JSON.stringify(template, null, 2)}\n`;
+    const existing = this.app.vault.getAbstractFileByPath(exportPath);
+    if (existing instanceof TFile) {
+      await this.app.vault.modify(existing, payload);
+    } else {
+      const setupFolder = normalizePath(`${this.settings.baseFolderPath}/_setup`);
+      if (!this.app.vault.getAbstractFileByPath(setupFolder)) {
+        await this.app.vault.createFolder(setupFolder);
+      }
+      await this.app.vault.create(exportPath, payload);
+    }
+
+    new Notice(`Team config template exported: ${exportPath}`);
+  }
+
+  async importTeamConfigFromActiveFile(): Promise<void> {
+    const activeFile = this.app.workspace.getActiveFile();
+    if (!activeFile) {
+      new Notice("Open a team-config JSON file first, then run import.");
+      return;
+    }
+    if (!activeFile.path.endsWith(".json")) {
+      new Notice("Active file must be a JSON file.");
+      return;
+    }
+
+    try {
+      const raw = await this.app.vault.read(activeFile);
+      const parsed = JSON.parse(raw) as Partial<TeamConfigTemplate>;
+      const apply = <K extends keyof TeamConfigTemplate>(key: K): void => {
+        if (parsed[key] !== undefined) {
+          (this.settings[key as keyof GranolaAdoraSettings] as unknown) =
+            parsed[key];
+        }
+      };
+
+      apply("syncIntervalMinutes");
+      apply("syncOnStartup");
+      apply("baseFolderPath");
+      apply("meetingsFolderName");
+      apply("ideasFolderName");
+      apply("customersFolderName");
+      apply("peopleFolderName");
+      apply("prioritiesFolderName");
+      apply("includeTranscript");
+      apply("autoTagEnabled");
+      apply("knownCustomers");
+      apply("knownTopics");
+      apply("syncSharedDocs");
+      apply("syncWorkspaceLists");
+      apply("syncLinear");
+      apply("linearFolderName");
+      apply("syncFigma");
+      apply("designsFolderName");
+      apply("aiEnabled");
+      apply("aiModel");
+      apply("aiModelFast");
+      apply("aiModelDeep");
+      apply("digestsFolderName");
+      apply("syncSlack");
+      apply("slackFolderName");
+      apply("syncGithub");
+      apply("githubOrg");
+      apply("githubFolderName");
+      apply("syncGoogleDrive");
+      apply("googleDriveFolderId");
+      apply("googleDriveFolderName");
+      apply("healthScoreEnabled");
+      apply("decisionsFolderName");
+      apply("releaseNotesFolderName");
+
+      this.updateTaggerConfig();
+      this.restartAutoSync();
+      await this.savePluginSettings();
+      new Notice("Team config imported. Add your API keys/tokens in settings.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      new Notice(`Failed to import team config: ${message}`);
+    }
   }
 
   async checkAuth(): Promise<boolean> {
@@ -632,6 +777,68 @@ export default class GranolaAdoraPlugin extends Plugin {
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
       new Notice(`Failed to generate theme analysis: ${message}`);
+    }
+  }
+
+  private frontmatterArray(value: unknown): string[] {
+    if (Array.isArray(value)) {
+      return value.filter((item): item is string => typeof item === "string");
+    }
+    if (typeof value === "string" && value.trim().length > 0) {
+      return [value];
+    }
+    return [];
+  }
+
+  private async generateTopCustomerAsks(): Promise<void> {
+    const ai = this.requireAI();
+    if (!ai) return;
+
+    new Notice("Analyzing top customer asks...");
+    try {
+      const meetingFiles = this.getMeetingFiles();
+      const monthAgo = new Date();
+      monthAgo.setDate(monthAgo.getDate() - 30);
+
+      const relevantFiles = meetingFiles.filter((file) => {
+        const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
+        const customers = this.frontmatterArray(fm?.customers);
+        if (customers.length === 0) {
+          return false;
+        }
+        const dateValue = typeof fm?.date === "string" ? fm.date : null;
+        if (!dateValue) {
+          return false;
+        }
+        return new Date(dateValue) >= monthAgo;
+      });
+
+      if (relevantFiles.length === 0) {
+        new Notice("No customer-tagged meetings found in the last 30 days.");
+        return;
+      }
+
+      const summaries: string[] = [];
+      for (const file of relevantFiles.slice(0, 40)) {
+        summaries.push(await this.getMeetingSummary(file));
+      }
+
+      const result = await ai.extractTopCustomerAsks(summaries);
+      const dateStr = new Date().toISOString().split("T")[0];
+      const filePath = normalizePath(
+        `${this.settings.baseFolderPath}/${this.settings.digestsFolderName}/Customer Asks — ${dateStr}.md`,
+      );
+
+      await this.writeAINote(
+        filePath,
+        `Top Customer Asks — ${dateStr}`,
+        "customer-asks",
+        result,
+      );
+      new Notice("Top customer asks report generated!");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      new Notice(`Failed to generate customer asks report: ${message}`);
     }
   }
 

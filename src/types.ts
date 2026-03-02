@@ -193,6 +193,16 @@ export interface GitHubPR {
   url: string;
 }
 
+// ── Google Drive types ──
+
+export interface GoogleDriveFile {
+  id: string;
+  name: string;
+  mimeType: string;
+  modifiedTime: string;
+  webViewLink: string;
+}
+
 // ── Decision / Release / Health types ──
 
 export interface Decision {
@@ -268,11 +278,55 @@ export interface GranolaAdoraSettings {
   githubToken: string;
   githubOrg: string;
   githubFolderName: string;
+  syncGoogleDrive: boolean;
+  googleDriveClientId: string;
+  googleDriveClientSecret: string;
+  googleDriveRefreshToken: string;
+  googleDriveAccessToken: string;
+  googleDriveFolderId: string;
+  googleDriveFolderName: string;
   healthScoreEnabled: boolean;
   decisionsFolderName: string;
   releaseNotesFolderName: string;
   aiModelFast: string;
   aiModelDeep: string;
+}
+
+export interface TeamConfigTemplate {
+  syncIntervalMinutes: number;
+  syncOnStartup: boolean;
+  baseFolderPath: string;
+  meetingsFolderName: string;
+  ideasFolderName: string;
+  customersFolderName: string;
+  peopleFolderName: string;
+  prioritiesFolderName: string;
+  includeTranscript: boolean;
+  autoTagEnabled: boolean;
+  knownCustomers: string[];
+  knownTopics: string[];
+  syncSharedDocs: boolean;
+  syncWorkspaceLists: boolean;
+  syncLinear: boolean;
+  linearFolderName: string;
+  syncFigma: boolean;
+  designsFolderName: string;
+  aiEnabled: boolean;
+  aiModel: string;
+  aiModelFast: string;
+  aiModelDeep: string;
+  digestsFolderName: string;
+  syncSlack: boolean;
+  slackFolderName: string;
+  syncGithub: boolean;
+  githubOrg: string;
+  githubFolderName: string;
+  syncGoogleDrive: boolean;
+  googleDriveFolderId: string;
+  googleDriveFolderName: string;
+  healthScoreEnabled: boolean;
+  decisionsFolderName: string;
+  releaseNotesFolderName: string;
 }
 
 export const DEFAULT_SETTINGS: GranolaAdoraSettings = {
@@ -323,6 +377,13 @@ export const DEFAULT_SETTINGS: GranolaAdoraSettings = {
   githubToken: "",
   githubOrg: "",
   githubFolderName: "GitHub",
+  syncGoogleDrive: false,
+  googleDriveClientId: "",
+  googleDriveClientSecret: "",
+  googleDriveRefreshToken: "",
+  googleDriveAccessToken: "",
+  googleDriveFolderId: "",
+  googleDriveFolderName: "Google Drive",
   healthScoreEnabled: false,
   decisionsFolderName: "Decisions",
   releaseNotesFolderName: "Releases",

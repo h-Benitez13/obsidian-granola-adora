@@ -1,6 +1,7 @@
 import { App, Notice, PluginSettingTab, Setting } from "obsidian";
 import type GranolaAdoraPlugin from "./main";
 import { FigmaClient } from "./figma";
+import { GoogleDriveClient } from "./gdrive";
 import { GitHubClient } from "./github";
 import { LinearClient } from "./linear";
 import { SlackClient } from "./slack";
@@ -432,6 +433,160 @@ export class GranolaAdoraSettingTab extends PluginSettingTab {
         }),
     );
 
+    containerEl.createEl("h3", { text: "Google Drive" });
+
+    new Setting(containerEl)
+      .setName("Sync from Google Drive")
+      .setDesc("Import Google Docs from one Drive folder into your vault.")
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.syncGoogleDrive)
+          .onChange(async (value) => {
+            this.plugin.settings.syncGoogleDrive = value;
+            await this.plugin.savePluginSettings();
+          }),
+      );
+
+    new Setting(containerEl)
+      .setName("Google Drive folder ID")
+      .setDesc("Folder ID to sync (from the Google Drive URL).")
+      .addText((text) =>
+        text
+          .setPlaceholder("1AbCdEf...")
+          .setValue(this.plugin.settings.googleDriveFolderId)
+          .onChange(async (value) => {
+            this.plugin.settings.googleDriveFolderId = value.trim();
+            await this.plugin.savePluginSettings();
+          }),
+      );
+
+    new Setting(containerEl)
+      .setName("Google access token")
+      .setDesc("OAuth access token for Google Drive API.")
+      .addText((text) =>
+        text
+          .setPlaceholder("ya29....")
+          .setValue(this.plugin.settings.googleDriveAccessToken)
+          .then((t) => {
+            t.inputEl.type = "password";
+            t.inputEl.style.width = "100%";
+          })
+          .onChange(async (value) => {
+            this.plugin.settings.googleDriveAccessToken = value.trim();
+            await this.plugin.savePluginSettings();
+          }),
+      );
+
+    new Setting(containerEl)
+      .setName("Google client ID")
+      .setDesc("OAuth client ID (required for automatic token refresh).")
+      .addText((text) =>
+        text
+          .setPlaceholder("...apps.googleusercontent.com")
+          .setValue(this.plugin.settings.googleDriveClientId)
+          .onChange(async (value) => {
+            this.plugin.settings.googleDriveClientId = value.trim();
+            await this.plugin.savePluginSettings();
+          }),
+      );
+
+    new Setting(containerEl)
+      .setName("Google client secret")
+      .setDesc("OAuth client secret (required for automatic token refresh).")
+      .addText((text) =>
+        text
+          .setPlaceholder("GOCSPX-...")
+          .setValue(this.plugin.settings.googleDriveClientSecret)
+          .then((t) => {
+            t.inputEl.type = "password";
+            t.inputEl.style.width = "100%";
+          })
+          .onChange(async (value) => {
+            this.plugin.settings.googleDriveClientSecret = value.trim();
+            await this.plugin.savePluginSettings();
+          }),
+      );
+
+    new Setting(containerEl)
+      .setName("Google refresh token")
+      .setDesc("OAuth refresh token to refresh expired access tokens.")
+      .addText((text) =>
+        text
+          .setPlaceholder("1//...")
+          .setValue(this.plugin.settings.googleDriveRefreshToken)
+          .then((t) => {
+            t.inputEl.type = "password";
+            t.inputEl.style.width = "100%";
+          })
+          .onChange(async (value) => {
+            this.plugin.settings.googleDriveRefreshToken = value.trim();
+            await this.plugin.savePluginSettings();
+          }),
+      );
+
+    const driveStatusSetting = new Setting(containerEl)
+      .setName("Test Google Drive connection")
+      .setDesc("Verify your Google Drive credentials and folder access.");
+
+    driveStatusSetting.addButton((btn) =>
+      btn.setButtonText("Test").onClick(async () => {
+        const folderId = this.plugin.settings.googleDriveFolderId;
+        if (!folderId) {
+          new Notice("Google Drive: Enter a folder ID first.");
+          return;
+        }
+        btn.setButtonText("Testing...");
+        btn.setDisabled(true);
+        try {
+          const client = new GoogleDriveClient(
+            this.plugin.settings.googleDriveClientId,
+            this.plugin.settings.googleDriveClientSecret,
+            this.plugin.settings.googleDriveRefreshToken,
+            this.plugin.settings.googleDriveAccessToken,
+          );
+          const ok = await client.testConnection(folderId);
+          if (ok) {
+            if (
+              client.getAccessToken() &&
+              client.getAccessToken() !==
+                this.plugin.settings.googleDriveAccessToken
+            ) {
+              this.plugin.settings.googleDriveAccessToken =
+                client.getAccessToken();
+              await this.plugin.savePluginSettings();
+            }
+            new Notice("Google Drive: Connection successful!");
+            driveStatusSetting.setDesc("Connected ✓");
+          } else {
+            new Notice(
+              "Google Drive: Connection failed. Check credentials and folder permissions.",
+            );
+            driveStatusSetting.setDesc(
+              "Connection failed — check credentials and folder access.",
+            );
+          }
+        } catch {
+          new Notice("Google Drive: Connection failed.");
+          driveStatusSetting.setDesc(
+            "Connection failed — check credentials and folder access.",
+          );
+        } finally {
+          btn.setButtonText("Test");
+          btn.setDisabled(false);
+        }
+      }),
+    );
+
+    new Setting(containerEl).setName("Google Drive folder").addText((text) =>
+      text
+        .setValue(this.plugin.settings.googleDriveFolderName)
+        .onChange(async (value) => {
+          this.plugin.settings.googleDriveFolderName =
+            value.trim() || "Google Drive";
+          await this.plugin.savePluginSettings();
+        }),
+    );
+
     containerEl.createEl("h3", { text: "AI (Claude)" });
 
     new Setting(containerEl)
@@ -654,6 +809,42 @@ export class GranolaAdoraSettingTab extends PluginSettingTab {
             await this.plugin.savePluginSettings();
             new Notice("Sync state reset. Next sync will import all notes.");
           }),
+      );
+
+    new Setting(containerEl)
+      .setName("Export team config template")
+      .setDesc(
+        "Create or update a sanitized team config JSON in your vault that others can reuse.",
+      )
+      .addButton((btn) =>
+        btn.setButtonText("Export").onClick(async () => {
+          btn.setButtonText("Exporting...");
+          btn.setDisabled(true);
+          try {
+            await this.plugin.exportTeamConfigTemplate();
+          } finally {
+            btn.setButtonText("Export");
+            btn.setDisabled(false);
+          }
+        }),
+      );
+
+    new Setting(containerEl)
+      .setName("Import team config from active file")
+      .setDesc(
+        "Open a team-config JSON file in the editor, then import to prefill non-sensitive settings.",
+      )
+      .addButton((btn) =>
+        btn.setButtonText("Import").onClick(async () => {
+          btn.setButtonText("Importing...");
+          btn.setDisabled(true);
+          try {
+            await this.plugin.importTeamConfigFromActiveFile();
+          } finally {
+            btn.setButtonText("Import");
+            btn.setDisabled(false);
+          }
+        }),
       );
   }
 }
