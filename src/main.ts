@@ -15,6 +15,7 @@ import { renderIdeaNote } from "./renderer";
 import { GranolaAdoraSettingTab } from "./settings-tab";
 import { IdeaFromMeetingModal } from "./modals";
 import { AICortex } from "./ai";
+import { Linker, formatLinkResult } from "./linker";
 
 export default class GranolaAdoraPlugin extends Plugin {
   settings: GranolaAdoraSettings = DEFAULT_SETTINGS;
@@ -90,6 +91,12 @@ export default class GranolaAdoraPlugin extends Plugin {
       id: "granola-extract-ideas",
       name: "Extract ideas from current note (AI)",
       callback: () => this.extractIdeasFromNote(),
+    });
+
+    this.addCommand({
+      id: "granola-auto-link",
+      name: "Re-link all notes (cross-integration)",
+      callback: () => this.runLinking(),
     });
 
     if (this.settings.syncOnStartup) {
@@ -466,6 +473,18 @@ export default class GranolaAdoraPlugin extends Plugin {
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
       new Notice(`Failed to extract ideas: ${message}`);
+    }
+  }
+
+  private async runLinking(): Promise<void> {
+    new Notice("Linking notes across integrations...");
+    try {
+      const linker = new Linker(this.app, () => this.settings);
+      const result = await linker.runFullLinkingPass();
+      new Notice(formatLinkResult(result));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      new Notice(`Linking failed: ${message}`);
     }
   }
 }
