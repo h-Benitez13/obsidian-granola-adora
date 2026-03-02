@@ -602,6 +602,10 @@ export class SyncEngine {
       folders.push(`${settings.baseFolderPath}/${settings.designsFolderName}`);
     }
 
+    if (settings.aiEnabled) {
+      folders.push(`${settings.baseFolderPath}/${settings.digestsFolderName}`);
+    }
+
     for (const folder of folders) {
       await this.ensureFolder(folder);
     }

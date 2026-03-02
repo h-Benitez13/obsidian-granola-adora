@@ -186,6 +186,10 @@ export interface GranolaAdoraSettings {
   figmaTeamId: string;
   syncFigma: boolean;
   designsFolderName: string;
+  claudeApiKey: string;
+  aiEnabled: boolean;
+  aiModel: string;
+  digestsFolderName: string;
 }
 
 export const DEFAULT_SETTINGS: GranolaAdoraSettings = {
@@ -225,6 +229,10 @@ export const DEFAULT_SETTINGS: GranolaAdoraSettings = {
   figmaTeamId: "",
   syncFigma: false,
   designsFolderName: "Designs",
+  claudeApiKey: "",
+  aiEnabled: false,
+  aiModel: "claude-sonnet-4-20250514",
+  digestsFolderName: "Digests",
 };
 
 export interface SyncResult {

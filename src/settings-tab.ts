@@ -266,6 +266,62 @@ export class GranolaAdoraSettingTab extends PluginSettingTab {
         }),
     );
 
+    containerEl.createEl("h3", { text: "AI (Claude)" });
+
+    new Setting(containerEl)
+      .setName("Enable AI features")
+      .setDesc(
+        "Use Claude to generate prep briefs, weekly digests, theme analysis, and idea extraction.",
+      )
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.aiEnabled)
+          .onChange(async (value) => {
+            this.plugin.settings.aiEnabled = value;
+            await this.plugin.savePluginSettings();
+          }),
+      );
+
+    new Setting(containerEl)
+      .setName("Claude API key")
+      .setDesc("API key from console.anthropic.com.")
+      .addText((text) =>
+        text
+          .setPlaceholder("sk-ant-...")
+          .setValue(this.plugin.settings.claudeApiKey)
+          .then((t) => {
+            t.inputEl.type = "password";
+            t.inputEl.style.width = "100%";
+          })
+          .onChange(async (value) => {
+            this.plugin.settings.claudeApiKey = value.trim();
+            await this.plugin.savePluginSettings();
+          }),
+      );
+
+    new Setting(containerEl)
+      .setName("Model")
+      .setDesc("Which Claude model to use for AI features.")
+      .addDropdown((dd) =>
+        dd
+          .addOption("claude-sonnet-4-20250514", "Claude Sonnet 4")
+          .addOption("claude-haiku-4-20250414", "Claude Haiku 4")
+          .setValue(this.plugin.settings.aiModel)
+          .onChange(async (value) => {
+            this.plugin.settings.aiModel = value;
+            await this.plugin.savePluginSettings();
+          }),
+      );
+
+    new Setting(containerEl).setName("Digests folder").addText((text) =>
+      text
+        .setValue(this.plugin.settings.digestsFolderName)
+        .onChange(async (value) => {
+          this.plugin.settings.digestsFolderName = value.trim() || "Digests";
+          await this.plugin.savePluginSettings();
+        }),
+    );
+
     containerEl.createEl("h3", { text: "Folders" });
 
     new Setting(containerEl)
